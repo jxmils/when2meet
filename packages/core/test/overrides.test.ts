@@ -32,16 +32,15 @@ describe('first fill', () => {
     ]);
   });
 
-  it('adds by default when slots are already marked, keeping them as overrides', () => {
+  it('follows the calendar by default even when slots are already marked', () => {
     const plan = planFill({ slots, server: '001100', calendar: '110000' });
-    expect(plan).toMatchObject({ mode: 'add', target: '111100', conflicts: [2, 3] });
-    expect(plan.overrides).toEqual({ '300': '1', '400': '1' });
+    expect(plan).toMatchObject({ mode: 'replace', target: '110000', conflicts: [] });
   });
 
-  it('replaces on request even when slots are marked', () => {
-    const plan = planFill({ slots, server: '001100', calendar: '110000', mode: 'replace' });
-    expect(plan.target).toBe('110000');
-    expect(plan.conflicts).toEqual([]);
+  it('can keep already-marked slots instead (add mode), as overrides', () => {
+    const plan = planFill({ slots, server: '001100', calendar: '110000', mode: 'add' });
+    expect(plan).toMatchObject({ mode: 'add', target: '111100', conflicts: [2, 3] });
+    expect(plan.overrides).toEqual({ '300': '1', '400': '1' });
   });
 });
 
@@ -95,10 +94,28 @@ describe('revisit', () => {
     expect(plan.overrides).toEqual({});
   });
 
-  it('keeps add-mode conflicts on later visits', () => {
-    const r = record('001100', '110000');
+  it('keeps add-mode conflicts on later visits, and reports them', () => {
+    const r = record('001100', '110000', 'add');
     const plan = planFill({ slots, server: '111100', calendar: '100000', record: r });
     expect(plan.target).toBe('101100');
+    expect(plan.conflicts).toEqual([2, 3]);
+  });
+
+  it('reports slots changed by hand that differ from the calendar', () => {
+    const r = record('000000', '110011');
+    // Marked available by hand during a meeting (slot 2) and unavailable at a free time (slot 5).
+    const plan = planFill({ slots, server: '111010', calendar: '110011', record: r });
+    expect(plan.changes).toEqual([]);
+    expect(plan.conflicts).toEqual([2, 5]);
+    const reset = planFill({
+      slots,
+      server: '111010',
+      calendar: '110011',
+      record: r,
+      resetOverrides: true,
+    });
+    expect(reset.target).toBe('110011');
+    expect(reset.conflicts).toEqual([]);
   });
 });
 

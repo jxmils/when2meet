@@ -88,6 +88,7 @@ export function Panel({ page, pollRef, initial }: Props) {
   const [showBest, setShowBest] = useState(false);
   const [checkedAt, setCheckedAt] = useState<number | null>(null);
   const confirmedName = useRef<string | null>(null);
+  const statusLoad = useRef<Promise<Status> | null>(null);
   const key = eventKey(pollRef);
   const weekdays = detectPollKind(poll.slots) === 'weekdays';
   const signedInAs = poll.userId ? poll.people.find((p) => p.id === poll.userId) : undefined;
@@ -100,13 +101,16 @@ export function Panel({ page, pollRef, initial }: Props) {
       : formatCoverage(firstSlot * 1000, (lastSlot + slotLengthSec(poll.slots)) * 1000, timeZone);
 
   useEffect(() => {
-    const loadStatus = () =>
-      send('getStatus')
+    const loadStatus = () => {
+      const request = send('getStatus');
+      statusLoad.current = request;
+      return request
         .then((s) => {
           setStatus(s);
           setName((current) => current || s.settings.displayName);
         })
         .catch((e: Error) => setView({ name: 'error', message: e.message }));
+    };
     void loadStatus();
     const onMessage = (message: unknown) => {
       const event = message as Partial<PollChangedEvent> | null;
@@ -130,6 +134,12 @@ export function Panel({ page, pollRef, initial }: Props) {
   }, [status !== null]);
 
   useEffect(() => () => clearPreview(), []);
+
+  /** The extension status, waiting for the first load if a click arrives before it. */
+  async function currentStatus(): Promise<Status | null> {
+    if (status) return status;
+    return (await statusLoad.current?.catch(() => null)) ?? null;
+  }
 
   async function refreshPoll(): Promise<PageState> {
     const fresh = await page.call('read', undefined);
@@ -167,7 +177,7 @@ export function Panel({ page, pollRef, initial }: Props) {
   }
 
   /** Signs in on the poll if needed; returns the person id, or null if waiting on the user. */
-  async function ensureSignedIn(): Promise<number | null> {
+  async function ensureSignedIn(extension: Status): Promise<number | null> {
     const current = await refreshPoll();
     if (current.userId) {
       const person = current.people.find((p) => p.id === current.userId);
@@ -178,7 +188,7 @@ export function Panel({ page, pollRef, initial }: Props) {
       });
       return current.userId;
     }
-    const wanted = name.trim();
+    const wanted = name.trim() || extension.settings.displayName;
     if (!wanted) {
       setView({ name: 'error', message: 'Enter the name you want to appear on this poll.' });
       return null;
@@ -202,7 +212,7 @@ export function Panel({ page, pollRef, initial }: Props) {
       return null;
     }
     await saveBinding(pollRef.id, { personId: result.userId, name: wanted, savedAt: Date.now() });
-    if (!status?.settings.displayName) {
+    if (!extension.settings.displayName) {
       const settings = await saveSettings({ displayName: wanted });
       setStatus((s) => (s ? { ...s, settings } : s));
     }
@@ -215,11 +225,12 @@ export function Panel({ page, pollRef, initial }: Props) {
     setBanner(null);
     clearPreview();
     try {
-      if (!status || status.accounts.length === 0) {
+      const current = await currentStatus();
+      if (!current || current.accounts.length === 0) {
         setView({ name: 'idle' });
         return;
       }
-      const personId = await ensureSignedIn();
+      const personId = await ensureSignedIn(current);
       if (!personId) return;
 
       setView({ name: 'working', label: 'Reading your calendars…' });
@@ -278,7 +289,7 @@ export function Panel({ page, pollRef, initial }: Props) {
       const preview: Preview = { personId, baseline: server.bits, compute, plan, record };
       // With nothing to save but slots marked that the calendar says are busy, show the preview
       // so the user can choose to remove them.
-      if (status.settings.skipPreview && plan.changes.length > 0) {
+      if (current.settings.skipPreview && plan.changes.length > 0) {
         await save(preview);
         return;
       }
@@ -392,10 +403,17 @@ export function Panel({ page, pollRef, initial }: Props) {
           type="button"
           class="pill"
           title={PRODUCT_NAME}
-          onClick={() => {
-            const ready = status && status.accounts.length > 0 && (poll.userId || name.trim());
-            if (banner?.kind === 'reconnect') openSettings();
-            else if (ready) void fill();
+          onClick={async () => {
+            if (banner?.kind === 'reconnect') {
+              openSettings();
+              return;
+            }
+            const current = await currentStatus();
+            const ready =
+              current &&
+              current.accounts.length > 0 &&
+              (poll.userId || name.trim() || current.settings.displayName);
+            if (ready) void fill();
             else setOpen(true);
           }}
         >
@@ -697,10 +715,10 @@ export function Panel({ page, pollRef, initial }: Props) {
     return (
       <>
         <p>
-          {plan.kind === 'revisit'
-            ? 'Your calendar changed since your last fill. Your manual edits are kept.'
-            : plan.changes.length === 0
-              ? 'Every time your calendar shows as free is already marked on this poll.'
+          {plan.changes.length === 0
+            ? 'Nothing new from your calendar.'
+            : plan.kind === 'revisit'
+              ? 'Your calendar changed since your last fill. Changes are highlighted on your grid.'
               : 'Here is what your calendar says. Changes are highlighted on your grid.'}
         </p>
         {coverage && <p class="muted">This poll covers {coverage}.</p>}
@@ -727,19 +745,7 @@ export function Panel({ page, pollRef, initial }: Props) {
         {reasons.has('new-slot') && (
           <p class="muted">The organizer added times since your last fill.</p>
         )}
-        {plan.conflicts.length > 0 && (
-          <div class="note">
-            {plural(plan.conflicts.length, 'slot')} you already marked{' '}
-            {plan.conflicts.length === 1 ? 'is' : 'are'} busy in your calendar. They're kept.{' '}
-            <button
-              type="button"
-              class="link"
-              onClick={() => void fill({ mode: 'replace', fresh: false })}
-            >
-              Remove them too
-            </button>
-          </div>
-        )}
+        {renderKeptNote(plan)}
         {weekdays && renderWeekPicker()}
         <div class="row">
           {plan.changes.length > 0 && (
@@ -751,17 +757,60 @@ export function Panel({ page, pollRef, initial }: Props) {
             {plan.changes.length > 0 ? 'Cancel' : 'Close'}
           </button>
         </div>
-        {plan.kind === 'revisit' && Object.keys(plan.overrides).length > 0 && (
+      </>
+    );
+  }
+
+  /** Explains slots that end up differing from the calendar, with a one-click switch. */
+  function renderKeptNote(plan: FillPlan) {
+    const n = plan.conflicts.length;
+    if (plan.kind === 'revisit' && n > 0) {
+      return (
+        <div class="note">
+          {plural(n, 'slot')} you changed by hand {n === 1 ? 'differs' : 'differ'} from your
+          calendar (outlined in yellow). {n === 1 ? "It's" : "They're"} kept.{' '}
           <button
             type="button"
             class="link"
             onClick={() => void fill({ resetOverrides: true, fresh: false })}
           >
-            Ignore my manual edits and follow the calendar exactly
+            Use my calendar for {n === 1 ? 'it' : 'these'}
           </button>
-        )}
-      </>
-    );
+        </div>
+      );
+    }
+    if (plan.kind === 'first' && plan.mode === 'add' && n > 0) {
+      return (
+        <div class="note">
+          {plural(n, 'slot')} you'd marked yourself {n === 1 ? 'is' : 'are'} busy in your calendar
+          (outlined in yellow). {n === 1 ? "It's" : "They're"} kept.{' '}
+          <button
+            type="button"
+            class="link"
+            onClick={() => void fill({ mode: 'replace', fresh: false })}
+          >
+            Use my calendar for {n === 1 ? 'it' : 'these'}
+          </button>
+        </div>
+      );
+    }
+    const removing = plan.changes.filter((c) => c.to === '0').length;
+    if (plan.kind === 'first' && plan.mode === 'replace' && removing > 0) {
+      return (
+        <p class="muted">
+          {plural(removing, 'slot')} you'd marked yourself {removing === 1 ? 'is' : 'are'} busy in
+          your calendar, so {removing === 1 ? "it's" : "they're"} removed.{' '}
+          <button
+            type="button"
+            class="link"
+            onClick={() => void fill({ mode: 'add', fresh: false })}
+          >
+            Keep {removing === 1 ? 'it' : 'them'}
+          </button>
+        </p>
+      );
+    }
+    return null;
   }
 
   function renderDone(props: {
