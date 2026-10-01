@@ -12,6 +12,7 @@ import {
   type IcsEventSpec,
   localDateOf,
   makeIcs,
+  openMoreSettings,
   pollUrl,
   SEED_POLLS,
   setUp,
@@ -171,7 +172,8 @@ test('on a later visit, applies calendar changes but keeps manual edits; undo re
   ]);
   await page.goto(`chrome-extension://${extensionId}/options.html`);
   await page.getByRole('button', { name: 'Remove' }).click();
-  await page.getByText('Import an .ics file').click();
+  await expect(page.getByText('Calendar removed.')).toBeVisible();
+  await page.getByRole('button', { name: /Apple & others/ }).click();
   await page.getByLabel('Calendar file').setInputFiles({
     name: 'calendar.ics',
     mimeType: 'text/calendar',
@@ -343,6 +345,7 @@ test('checks a days-of-the-week poll against a whole term of weeks', async ({
 
   // "Most weeks" ignores the one-off but still respects the class (8 of 10 weeks).
   await page.goto(`chrome-extension://${extensionId}/options.html`);
+  await openMoreSettings(page);
   await page.getByLabel(/Count a weekday time as free/).selectOption('most');
   await page.goto(pollUrl(weekdays));
   await page.getByRole('button', { name: /Fill from my calendar|Calendar changed/ }).click();

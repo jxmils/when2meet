@@ -29,7 +29,12 @@ test('panel screenshots', async ({ context, extensionId, mock }) => {
   ]);
   const page = await context.newPage();
   await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`chrome-extension://${extensionId}/options.html`);
+  await page.screenshot({ path: `${OUT}/options-first-run.png` });
+  await page.getByRole('button', { name: 'Outlook' }).click();
+  await page.screenshot({ path: `${OUT}/options-outlook.png` });
   await setUp(page, extensionId, { name: 'Jordan Lee', ics });
+  await page.getByText('More settings').click();
   await page.screenshot({ path: `${OUT}/options.png`, fullPage: true });
 
   await page.goto(pollUrl(SEED_POLLS.dates));
