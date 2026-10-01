@@ -11,3 +11,4 @@ export * from './slots.ts';
 export * from './target.ts';
 export * from './types.ts';
 export * from './tz.ts';
+export * from './weeks.ts';

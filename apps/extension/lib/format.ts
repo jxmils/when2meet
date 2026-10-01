@@ -38,6 +38,19 @@ export function formatWeek(sunday: string): string {
   );
 }
 
+/** "Oct 5 – Dec 11" for `weeks` weeks starting on a Sunday date (Monday to Friday of the last). */
+export function formatWeeks(sunday: string, weeks: number): string {
+  if (weeks <= 1) return formatWeek(sunday);
+  const toUtc = (date: string) => {
+    const d = parsePlainDate(date);
+    return Date.UTC(d.year, d.month - 1, d.day, 12);
+  };
+  return fmt('UTC', { month: 'short', day: 'numeric' }).formatRange(
+    toUtc(addDays(sunday, 1)),
+    toUtc(addDays(sunday, 7 * (weeks - 1) + 5)),
+  );
+}
+
 export function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }

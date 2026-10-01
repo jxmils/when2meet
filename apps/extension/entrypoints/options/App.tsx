@@ -1,4 +1,4 @@
-import { isValidTimeZone, type Rules, systemTimeZone } from '@w2msync/core';
+import { isValidTimeZone, MAX_WEEKS, type Rules, systemTimeZone } from '@w2msync/core';
 import { useEffect, useState } from 'preact/hooks';
 import { browser } from 'wxt/browser';
 import type { Account, CalendarChoice } from '../../lib/accounts.ts';
@@ -172,20 +172,56 @@ export function App() {
 
       <section>
         <h2>Polls</h2>
-        <label>
-          Days-of-the-week polls use
-          <select
-            value={settings.weekdayPollWeek}
-            onChange={(e) =>
-              void update({
-                weekdayPollWeek: (e.target as HTMLSelectElement).value as 'this' | 'next',
-              })
-            }
-          >
-            <option value="next">next week</option>
-            <option value="this">this week</option>
-          </select>
-        </label>
+        <div class="grid2">
+          <label>
+            Days-of-the-week polls start from
+            <select
+              value={settings.weekdayPollWeek}
+              onChange={(e) =>
+                void update({
+                  weekdayPollWeek: (e.target as HTMLSelectElement).value as 'this' | 'next',
+                })
+              }
+            >
+              <option value="next">next week</option>
+              <option value="this">this week</option>
+            </select>
+          </label>
+          <label>
+            …and check this many weeks
+            <input
+              type="number"
+              min={1}
+              max={MAX_WEEKS}
+              value={settings.weekdayPollWeeks}
+              onChange={(e) => {
+                const weeks = Math.round(Number((e.target as HTMLInputElement).value) || 1);
+                void update({ weekdayPollWeeks: Math.min(MAX_WEEKS, Math.max(1, weeks)) });
+              }}
+            />
+          </label>
+        </div>
+        {settings.weekdayPollWeeks > 1 ? (
+          <label>
+            Count a weekday time as free when I'm free
+            <select
+              value={settings.weekdayPollMatch}
+              onChange={(e) =>
+                void update({
+                  weekdayPollMatch: (e.target as HTMLSelectElement).value as 'all' | 'most',
+                })
+              }
+            >
+              <option value="all">in every one of those weeks</option>
+              <option value="most">in most of those weeks (ignores one-off events)</option>
+            </select>
+          </label>
+        ) : (
+          <p class="muted">
+            Picking a weekly time for a whole term? Check 10 or more weeks so you're only marked
+            free when you're free every week.
+          </p>
+        )}
         <label>
           Timezone
           <input

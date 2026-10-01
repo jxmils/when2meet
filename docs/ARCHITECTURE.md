@@ -58,7 +58,10 @@ Fill records are stored packed (`packages/core/src/record-codec.ts`): slot times
 
 - Slot length is the smallest gap between `TimeOfSlot` values (normally 900 s).
 - Specific-date polls store real instants: slot *i* covers `[t, t + length)`.
-- Days-of-the-week polls store clock times in a reference week beginning Sunday 1978-11-12 00:00 UTC (`279676800`). Each slot is placed on the same weekday and clock time of the chosen real week in the user's timezone. A slot whose start falls in a skipped DST hour is unknown (`?`); one inside a repeated hour covers both occurrences, so it is free only if both are.
+- Days-of-the-week polls store clock times in a reference week beginning Sunday 1978-11-12 00:00 UTC (`279676800`).
+  - Each slot is placed on the same weekday and clock time of the chosen real week in the user's timezone.
+  - A slot whose start falls in a skipped DST hour is unknown (`?`). One inside a repeated hour covers both occurrences, so it is free only if both are.
+  - With several weeks checked (`weeks.ts`), the poll is mapped onto each week and the results are combined. In `all` mode a slot is free only if it's free in every week; in `most` mode, in more weeks than not. Unknown weeks don't count.
 
 ### Busy → availability (`rules.ts`, `target.ts`)
 

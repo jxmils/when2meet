@@ -1,4 +1,4 @@
-import { DEFAULT_RULES, type Rules } from '@w2msync/core';
+import { DEFAULT_RULES, type Rules, type WeekMatch } from '@w2msync/core';
 import { browser } from 'wxt/browser';
 
 export interface Settings {
@@ -9,6 +9,10 @@ export interface Settings {
   timeZone: string;
   /** Which real week a days-of-the-week poll is read from by default. */
   weekdayPollWeek: 'this' | 'next';
+  /** How many consecutive weeks a days-of-the-week poll is checked against (e.g. a term). */
+  weekdayPollWeeks: number;
+  /** With several weeks: free only if free every week (`all`), or in most weeks. */
+  weekdayPollMatch: WeekMatch;
   rules: Rules;
   /** Save straight away instead of showing a preview first. */
   skipPreview: boolean;
@@ -26,6 +30,8 @@ export const DEFAULT_SETTINGS: Settings = {
   displayName: '',
   timeZone: '',
   weekdayPollWeek: 'next',
+  weekdayPollWeeks: 1,
+  weekdayPollMatch: 'all',
   rules: DEFAULT_RULES,
   skipPreview: false,
   checkOnOpen: true,

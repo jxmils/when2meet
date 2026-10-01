@@ -2,7 +2,7 @@
  * Typed request/response messages between extension pages, content scripts and the background.
  * Uses `sendResponse` + `return true`, which every target browser supports.
  */
-import type { Bits, Interval, PollKind, UnixSec } from '@w2msync/core';
+import type { Bits, Interval, PollKind, UnixSec, WeekMatch } from '@w2msync/core';
 import { browser } from 'wxt/browser';
 import type { Account, CalendarChoice } from './accounts.ts';
 import { AppError, reviveError, type SerializedError, serializeError } from './errors.ts';
@@ -38,7 +38,11 @@ export interface ComputeResult {
   /** Calendar-derived availability, one character per slot (`?` = unknown). */
   bits: Bits;
   kind: PollKind;
+  /** Days-of-the-week polls: Sunday of the first real week checked. */
   weekStart: string | null;
+  /** How many consecutive weeks were checked (1 for specific-date polls). */
+  weeks: number;
+  match: WeekMatch;
   timeZone: string;
   rulesHash: string;
   sourcesHash: string;
