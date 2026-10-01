@@ -7,6 +7,7 @@
  */
 import {
   addDays,
+  dayOfWeek,
   detectPollKind,
   localDate,
   parseClock,
@@ -46,16 +47,26 @@ interface PollBasics {
   slotMinutes?: number;
 }
 
-/** A specific-dates poll: `days` consecutive dates from `startDate`, `from`–`to` local time. */
+/**
+ * A specific-dates poll over `days` consecutive dates from `startDate` (optionally only on some
+ * weekdays, e.g. a term of Monday–Friday), `from`–`to` local time.
+ */
 export function makeDatesPoll(
-  options: PollBasics & { startDate: string; days: number; timeZone: string },
+  options: PollBasics & {
+    startDate: string;
+    days: number;
+    timeZone: string;
+    daysOfWeek?: number[];
+  },
 ): SyntheticPoll {
   const slotSec = (options.slotMinutes ?? 15) * 60;
   const fromSec = parseClock(options.from) * 60;
   const toSec = parseClock(options.to) * 60;
   const slots: UnixSec[] = [];
   for (let d = 0; d < options.days; d++) {
-    const date = parsePlainDate(addDays(options.startDate, d));
+    const day = addDays(options.startDate, d);
+    if (options.daysOfWeek && !options.daysOfWeek.includes(dayOfWeek(day))) continue;
+    const date = parsePlainDate(day);
     for (let s = fromSec; s < toSec; s += slotSec) {
       const wall = {
         ...date,

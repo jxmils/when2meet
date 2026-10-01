@@ -5,6 +5,7 @@ export * from './ics-export.ts';
 export * from './intervals.ts';
 export * from './links.ts';
 export * from './overrides.ts';
+export * from './record-codec.ts';
 export * from './rules.ts';
 export * from './slots.ts';
 export * from './target.ts';

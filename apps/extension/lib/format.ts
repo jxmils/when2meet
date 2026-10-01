@@ -41,3 +41,11 @@ export function formatWeek(sunday: string): string {
 export function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }
+
+/** "Oct 5 – Dec 11 · 10 weeks" for polls spanning more than a week, otherwise null. */
+export function formatCoverage(start: EpochMs, end: EpochMs, timeZone: string): string | null {
+  const days = (end - start) / 86_400_000;
+  if (!(days > 7)) return null;
+  const dates = fmt(timeZone, { month: 'short', day: 'numeric' }).formatRange(start, end - 1);
+  return `${dates} · ${Math.ceil(days / 7)} weeks`;
+}

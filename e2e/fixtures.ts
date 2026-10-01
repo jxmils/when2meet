@@ -61,14 +61,14 @@ export const expect = test.expect;
 export async function setUp(
   page: Page,
   extensionId: string,
-  options: { name: string; ics: string },
+  options: { name: string; ics: string; timeZone?: string },
 ) {
   await page.goto(`chrome-extension://${extensionId}/options.html`);
   const name = page.getByLabel('Name', { exact: true });
   await name.fill(options.name);
   await name.press('Tab');
   const timezone = page.getByLabel('Timezone');
-  await timezone.fill(TZ);
+  await timezone.fill(options.timeZone ?? TZ);
   await timezone.press('Tab');
   await page.getByText('Import an .ics file').click();
   await page.getByLabel('Calendar file').setInputFiles({

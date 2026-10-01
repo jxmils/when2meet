@@ -50,7 +50,7 @@ Tokens, calendar links and busy blocks stay in the background; the page (When2me
 | `storage.session` | access tokens, 5-minute busy-time cache |
 | Extension IndexedDB | refresh tokens, calendar links, imported `.ics` text (not readable by content scripts) |
 
-Fill records are deleted 90 days after a poll's last slot.
+Fill records are stored packed (`packages/core/src/record-codec.ts`): slot times as runs and bits as strings. This keeps term-long polls with thousands of slots to a few KB each. Records are deleted 90 days after a poll's last slot.
 
 ## Key algorithms
 

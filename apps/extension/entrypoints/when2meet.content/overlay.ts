@@ -9,12 +9,20 @@ const CSS = `
   box-shadow: inset 0 0 0 2px #1a7f37 !important;
   background-image: repeating-linear-gradient(45deg, rgba(26,127,55,.55) 0 3px, transparent 3px 7px) !important;
 }
+[${ATTR}="conflict"] {
+  box-shadow: inset 0 0 0 2px #bf8700 !important;
+  background-image: repeating-linear-gradient(90deg, rgba(191,135,0,.45) 0 3px, transparent 3px 7px) !important;
+}
 [${ATTR}="remove"] {
   box-shadow: inset 0 0 0 2px #cf222e !important;
   background-image: repeating-linear-gradient(-45deg, rgba(207,34,46,.5) 0 3px, transparent 3px 7px) !important;
 }`;
 
-export function showPreview(changes: readonly PlannedChange[]): number {
+/** Highlights cells that will change, plus marked slots the calendar says are busy (kept). */
+export function showPreview(
+  changes: readonly PlannedChange[],
+  conflicts: readonly number[] = [],
+): number {
   clearPreview();
   if (!document.getElementById(STYLE_ID)) {
     const style = document.createElement('style');
@@ -23,6 +31,9 @@ export function showPreview(changes: readonly PlannedChange[]): number {
     document.head.append(style);
   }
   let shown = 0;
+  for (const slot of conflicts) {
+    document.getElementById(`YouTime${slot}`)?.setAttribute(ATTR, 'conflict');
+  }
   for (const change of changes) {
     const cell = document.getElementById(`YouTime${change.slot}`);
     if (!cell) continue;
