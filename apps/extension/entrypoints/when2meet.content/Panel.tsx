@@ -3,6 +3,7 @@ import {
   type Bits,
   bitsForPerson,
   countAvailable,
+  defaultWeekStart,
   detectPollKind,
   type FillMode,
   type FillPlan,
@@ -624,45 +625,49 @@ export function Panel({ page, pollRef, initial }: Props) {
     );
   }
 
-  function weekLabel(shown: string | null): string {
+  /** The week a days-of-the-week poll is read from: chosen, or the default from settings. */
+  function currentWeek(): string {
+    return (
+      week ?? defaultWeekStart(Date.now(), timeZone, status?.settings.weekdayPollWeek ?? 'next')
+    );
+  }
+
+  function weekLabel(sunday: string): string {
     const weeks = status?.settings.weekdayPollWeeks ?? 1;
-    if (weeks > 1) {
-      return shown
-        ? `Checking your weeks of ${formatWeeks(shown, weeks)} (${weeks} weeks)`
-        : `Checks ${weeks} weeks of your calendar, starting ${status?.settings.weekdayPollWeek === 'this' ? 'this' : 'next'} week`;
-    }
-    return shown
-      ? `Using your week of ${formatWeek(shown)}`
-      : `Uses ${status?.settings.weekdayPollWeek === 'this' ? 'this' : 'next'} week from your calendar`;
+    const offset = Math.round(
+      (Date.parse(sunday) - Date.parse(defaultWeekStart(Date.now(), timeZone, 'this'))) /
+        (7 * 86_400_000),
+    );
+    const when =
+      offset === 0
+        ? 'this week'
+        : offset === 1
+          ? 'next week'
+          : offset === -1
+            ? 'last week'
+            : offset > 1
+              ? `${offset} weeks from now`
+              : `${-offset} weeks ago`;
+    const past = offset <= 0 ? ' (past days are left as they are)' : '';
+    return weeks > 1
+      ? `Based on ${weeks} weeks from ${when} · ${formatWeeks(sunday, weeks)}${past}`
+      : `Based on ${when} · ${formatWeek(sunday)}${past}`;
   }
 
   function renderWeekPicker() {
-    const shown = week;
+    const shown = currentWeek();
     const shift = (days: number) => {
-      if (!shown) return;
       const next = addDays(shown, days);
       setWeek(next);
       if (view.name === 'preview') void fill({ week: next });
     };
     return (
       <div class="week">
-        <button
-          type="button"
-          class="icon"
-          aria-label="Previous week"
-          onClick={() => shift(-7)}
-          disabled={!shown}
-        >
+        <button type="button" class="icon" aria-label="Earlier week" onClick={() => shift(-7)}>
           ‹
         </button>
         <span>{weekLabel(shown)}</span>
-        <button
-          type="button"
-          class="icon"
-          aria-label="Next week"
-          onClick={() => shift(7)}
-          disabled={!shown}
-        >
+        <button type="button" class="icon" aria-label="Later week" onClick={() => shift(7)}>
           ›
         </button>
       </div>

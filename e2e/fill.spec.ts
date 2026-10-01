@@ -118,7 +118,7 @@ test('fills a days-of-the-week poll using next week', async ({ context, extensio
 
   await page.goto(pollUrl(weekdays));
   await page.getByRole('button', { name: 'Fill from my calendar' }).click();
-  await expect(page.getByText(/Using your week of/)).toBeVisible();
+  await expect(page.getByText(/Based on next week ·/)).toBeVisible();
   await page.getByRole('button', { name: 'Save to When2meet' }).click();
   await expect(page.getByText(/checked against When2meet/)).toBeVisible();
 
@@ -336,7 +336,7 @@ test('checks a days-of-the-week poll against a whole term of weeks', async ({
 
   await page.goto(pollUrl(weekdays));
   await page.getByRole('button', { name: /Fill from my calendar|Calendar changed/ }).click();
-  await expect(page.getByText(/Checking your weeks of .* \(10 weeks\)/)).toBeVisible();
+  await expect(page.getByText(/Based on 10 weeks from next week ·/)).toBeVisible();
   await expect(page.getByText(/free in every one of those 10 weeks/)).toBeVisible();
   await page.getByRole('button', { name: 'Save to When2meet' }).click();
   await expect(page.getByText(/checked against When2meet/)).toBeVisible();
