@@ -1,0 +1,38 @@
+name: Bug report
+description: Something didn't work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! Please **don't paste calendar links, poll passwords or private poll URLs** here.
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Browser
+      options: [Chrome, Edge, Firefox, Other Chromium browser]
+    validations:
+      required: true
+  - type: dropdown
+    id: calendar
+    attributes:
+      label: Calendar source
+      multiple: true
+      options: [Google (sign-in), Microsoft (sign-in), Calendar link, .ics file]
+  - type: dropdown
+    id: poll
+    attributes:
+      label: Poll type
+      options: [Specific dates, Days of the week, Not sure]
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Steps, what you expected, and what you saw (screenshots help; blur names if needed).
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Extension version
+      description: Settings → Advanced.

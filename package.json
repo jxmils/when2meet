@@ -1,0 +1,45 @@
+{
+  "name": "when2meet-calendar-sync",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fill your When2meet availability from Google Calendar, Outlook, or any ICS calendar in one click.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jxmils/when2meet.git"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "npm@11.9.0",
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "tools/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @w2msync/extension",
+    "dev:firefox": "npm run dev:firefox -w @w2msync/extension",
+    "build": "npm run build -w @w2msync/extension",
+    "build:all": "npm run build:all -w @w2msync/extension",
+    "zip": "npm run zip:all -w @w2msync/extension",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "npm run build -w @w2msync/extension && playwright test",
+    "mock": "node tools/mock-when2meet/src/server.ts",
+    "canary": "node tools/canary/src/check.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@playwright/test": "1.63.0",
+    "@types/node": "^24.0.0",
+    "fast-check": "^4.10.2",
+    "happy-dom": "^20.14.5",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}

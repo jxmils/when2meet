@@ -1,0 +1,15 @@
+node_modules/
+.output/
+.wxt/
+dist/
+coverage/
+playwright-report/
+test-results/
+blob-report/
+.wrangler/
+web-ext-artifacts/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store

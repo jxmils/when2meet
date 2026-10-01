@@ -1,0 +1,18 @@
+{
+  "name": "@w2msync/when2meet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "When2meet adapter: parse poll pages, plan and execute availability saves, verify against the server.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./page": "./src/page.ts",
+    "./testing": "./src/testing/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@w2msync/core": "0.1.0"
+  }
+}

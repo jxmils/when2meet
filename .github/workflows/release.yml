@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Build and zip every browser
+        env:
+          WXT_GOOGLE_BROKER_URL: ${{ vars.WXT_GOOGLE_BROKER_URL }}
+          WXT_MICROSOFT_CLIENT_ID: ${{ vars.WXT_MICROSOFT_CLIENT_ID }}
+        run: npm run zip
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" apps/extension/.output/*.zip --generate-notes --verify-tag
+      - name: Submit to browser stores (when credentials are configured)
+        working-directory: apps/extension
+        env:
+          CHROME_API_VERSION: v2
+          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CHROME_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+          CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          FIREFOX_EXTENSION_ID: ${{ secrets.FIREFOX_EXTENSION_ID }}
+          FIREFOX_JWT_ISSUER: ${{ secrets.FIREFOX_JWT_ISSUER }}
+          FIREFOX_JWT_SECRET: ${{ secrets.FIREFOX_JWT_SECRET }}
+          EDGE_PRODUCT_ID: ${{ secrets.EDGE_PRODUCT_ID }}
+          EDGE_CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
+          EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
+        run: |
+          shopt -s nullglob
+          args=()
+          if [ -n "$CHROME_EXTENSION_ID" ]; then args+=(--chrome-zip .output/*-chrome.zip); fi
+          if [ -n "$FIREFOX_EXTENSION_ID" ]; then
+            args+=(--firefox-zip .output/*-firefox.zip --firefox-sources-zip .output/*-sources.zip)
+          fi
+          if [ -n "$EDGE_PRODUCT_ID" ]; then args+=(--edge-zip .output/*-edge.zip); fi
+          if [ ${#args[@]} -eq 0 ]; then
+            echo "No store credentials configured; skipping store submission."
+            exit 0
+          fi
+          npx wxt submit "${args[@]}"

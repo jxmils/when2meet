@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Calendar Sync for When2meet</title>
+    <meta
+      name="description"
+      content="Fill your When2meet availability from Google Calendar, Outlook or any calendar link in one click. Free and open source."
+    />
+    <link rel="icon" href="/icon.png" />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header>
+      <img src="/icon.png" alt="" width="32" height="32" />
+      <a href="/">Calendar Sync for When2meet</a>
+    </header>
+    <main>
+      <div id="poll" class="poll" hidden>
+        <strong>Here to fill a When2meet poll?</strong>
+        <p>
+          The no-install web version is on its way. For now, open the poll on When2meet, and use
+          the browser extension to fill it from your calendar.
+        </p>
+        <a id="poll-link" class="button" href="https://www.when2meet.com/">Open the poll on When2meet</a>
+      </div>
+
+      <h1>Fill When2meet from your calendar, in one click.</h1>
+      <p class="lede">
+        Connect Google Calendar, Outlook or any calendar link once. On every When2meet poll, click
+        <strong>Fill from my calendar</strong>, check the preview, and save.
+      </p>
+      <div class="buttons">
+        <a class="button" href="https://github.com/jxmils/when2meet/releases/latest">Get the extension</a>
+        <a class="button secondary" href="https://github.com/jxmils/when2meet">Source code</a>
+      </div>
+      <p class="muted">Chrome, Edge and Firefox. Free and open source (MIT). Unofficial: not affiliated with When2meet.</p>
+
+      <h2>How it works</h2>
+      <ol class="steps">
+        <li><strong>1. Connect calendars.</strong><br />Google, Microsoft 365 / Outlook, or a calendar link from Apple iCloud, Proton, Fastmail and others. Use as many as you like.</li>
+        <li><strong>2. Open any poll.</strong><br />A <em>Fill from my calendar</em> button appears on When2meet pages. It signs in with your name.</li>
+        <li><strong>3. Check and save.</strong><br />Changes are highlighted on your grid. Save, and the result is checked against When2meet. Undo is one click.</li>
+      </ol>
+
+      <h2>Built to stay out of the way</h2>
+      <ul>
+        <li><strong>Updates on revisit.</strong> If your calendar changes, reopening the poll offers a one-click update. Edits you made by hand are kept.</li>
+        <li><strong>Your rules.</strong> Buffers around meetings, working hours, how to treat tentative and all-day events.</li>
+        <li><strong>Best times.</strong> See the windows that work for the most people and add one to Google, Outlook or any calendar.</li>
+        <li><strong>Private by design.</strong> Your calendar is read in your browser and only free/busy times are used. Nothing is stored on our servers.</li>
+      </ul>
+
+      <h2>Privacy</h2>
+      <p>
+        The extension reads only free/busy information (Google) or basic event times (Microsoft),
+        computes your availability in your browser, and sends When2meet only the slots you choose
+        to save, under the name you give. See the <a href="/privacy">privacy policy</a>.
+      </p>
+    </main>
+    <footer>
+      <nav>
+        <a href="/privacy">Privacy policy</a>
+        <a href="/terms">Terms</a>
+        <a href="https://github.com/jxmils/when2meet">GitHub</a>
+        <a href="https://github.com/jxmils/when2meet/issues">Support</a>
+      </nav>
+      <p>When2meet is a trademark of its owner. This project is independent and unofficial.</p>
+    </footer>
+    <script>
+      // Links like https://<this site>/?123-abc mirror When2meet's; send people to the poll.
+      const match = /^\?(\d+)-([A-Za-z0-9]+)/.exec(location.search);
+      if (match) {
+        document.getElementById('poll').hidden = false;
+        document.getElementById('poll-link').href = `https://www.when2meet.com/?${match[1]}-${match[2]}`;
+      }
+    </script>
+  </body>
+</html>
