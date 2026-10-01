@@ -1,0 +1,32 @@
+{
+  "name": "@w2msync/extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser extension: fill When2meet availability from your calendars.",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "dev:firefox": "wxt -b firefox --mv3",
+    "build": "wxt build",
+    "build:firefox": "wxt build -b firefox --mv3",
+    "build:edge": "wxt build -b edge",
+    "build:all": "wxt build && wxt build -b firefox --mv3 && wxt build -b edge",
+    "zip": "wxt zip",
+    "zip:all": "wxt zip && wxt zip -b firefox --mv3 && wxt zip -b edge",
+    "typecheck": "wxt prepare && tsc --noEmit -p .",
+    "gen:icons": "node scripts/gen-icons.ts",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "@w2msync/core": "0.1.0",
+    "@w2msync/providers": "0.1.0",
+    "@w2msync/when2meet": "0.1.0",
+    "idb-keyval": "^6.3.0",
+    "preact": "^11.0.0"
+  },
+  "devDependencies": {
+    "vite": "^8.3.2",
+    "web-ext": "^10.7.0",
+    "wxt": "^0.21.4"
+  }
+}

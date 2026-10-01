@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy policy · Calendar Sync for When2meet</title>
+    <link rel="icon" href="/icon.png" />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header>
+      <img src="/icon.png" alt="" width="32" height="32" />
+      <a href="/">Calendar Sync for When2meet</a>
+    </header>
+    <main>
+      <h1>Privacy policy</h1>
+      <p class="muted">Last updated: 1 October 2026</p>
+
+      <p>
+        Calendar Sync for When2meet ("the extension") is a free, open-source browser extension
+        that fills your availability on When2meet polls from your calendars. This policy explains
+        what data it touches and why. The source code is public at
+        <a href="https://github.com/jxmils/when2meet">github.com/jxmils/when2meet</a>, so you can
+        check every statement below.
+      </p>
+
+      <h2>Summary</h2>
+      <ul>
+        <li>Your calendar is read by the extension in your browser. We don't run servers that receive your calendar data.</li>
+        <li>Only free/busy times are used. Event titles, descriptions, attendees and locations are not requested from Google or Microsoft.</li>
+        <li>When you click Save, the extension sends When2meet your availability for that poll and the name you chose, which is exactly what you would send by filling the poll by hand.</li>
+        <li>We don't sell, share or analyse your data, show ads or use analytics.</li>
+      </ul>
+
+      <h2>Data the extension accesses</h2>
+      <h3>Google Calendar (if you connect it)</h3>
+      <ul>
+        <li><code>calendar.freebusy</code>: the busy time ranges of your calendars, without any event details.</li>
+        <li><code>calendar.calendarlist.readonly</code> (only if you choose calendars): the names of your calendars, so you can pick which ones count.</li>
+        <li><code>openid</code> and <code>email</code>: your email address, to label the connected account.</li>
+      </ul>
+      <h3>Microsoft 365 / Outlook (if you connect it)</h3>
+      <ul>
+        <li><code>Calendars.ReadBasic</code>: start and end times and the "show as" status (busy, tentative, away) of events. Microsoft defines this permission as excluding event bodies and attachments.</li>
+        <li><code>openid</code>, <code>profile</code>, <code>offline_access</code>: your sign-in name and the ability to stay connected.</li>
+      </ul>
+      <h3>Calendar links and files (if you add them)</h3>
+      <p>
+        An iCalendar link or file contains whatever your calendar provider puts in it. The
+        extension reads it in your browser, uses only event times and free/busy status, and
+        discards the rest.
+      </p>
+      <h3>When2meet pages</h3>
+      <p>
+        On When2meet poll pages the extension reads the poll's time slots and the publicly visible
+        availability of participants, to preview changes and suggest the best meeting times.
+      </p>
+
+      <h2>How data is used</h2>
+      <p>
+        Calendar information is used only to work out which poll slots you are free in, at your
+        request, and to show you which slots would change. It is not used for any other purpose.
+      </p>
+
+      <h2>Where data is stored</h2>
+      <ul>
+        <li><strong>In your browser:</strong> your settings, the list of connected calendars, sign-in tokens, calendar links, and a record of what was filled on each poll (so later updates keep your manual edits). Records are deleted automatically about 90 days after a poll's last date.</li>
+        <li><strong>Busy times</strong> are kept in browser memory for up to 5 minutes, to avoid reading your calendar repeatedly.</li>
+        <li><strong>On our servers:</strong> nothing. See "Sign-in service" below.</li>
+      </ul>
+
+      <h2>What leaves your browser</h2>
+      <ul>
+        <li><strong>To Google or Microsoft:</strong> the requests needed to read your free/busy times, made with your permission.</li>
+        <li><strong>To When2meet:</strong> when you save, your availability for that poll and your chosen name (and the poll password, if you set one), sent to When2meet as if you had filled the poll yourself.</li>
+        <li><strong>To the sign-in service:</strong> during Google sign-in only, see below.</li>
+      </ul>
+
+      <h2>Sign-in service</h2>
+      <p>
+        Google requires a web server to complete sign-in for this kind of app. Our small
+        open-source sign-in service (at this website, under <code>/oauth/</code>) forwards Google's
+        one-time sign-in code to your extension and adds the app's credentials when your extension
+        exchanges or refreshes its access. The codes and tokens pass through it in memory only; it
+        does not store or log them, and it never reads your calendar. Microsoft sign-in does not
+        use this service.
+      </p>
+
+      <h2>Google API Services User Data Policy</h2>
+      <p>
+        The extension's use and transfer of information received from Google APIs adheres to the
+        <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>,
+        including the Limited Use requirements. Google user data is used only to provide the
+        user-facing feature described above, is not transferred to anyone except as needed to
+        provide it (When2meet receives your availability when you save), is not used for
+        advertising, and is not read by humans.
+      </p>
+
+      <h2>Your choices</h2>
+      <ul>
+        <li>Disconnect any calendar in the extension's settings. Google access is revoked when you disconnect a Google account.</li>
+        <li>"Disconnect everything and erase data" in settings removes all stored data at once. Uninstalling the extension also deletes its data.</li>
+        <li>You can also revoke access from your <a href="https://myaccount.google.com/permissions">Google account</a> or <a href="https://myapps.microsoft.com/">Microsoft account</a> at any time.</li>
+        <li>Availability you saved on When2meet stays on When2meet; remove it there, or use Undo right after saving.</li>
+      </ul>
+
+      <h2>Children</h2>
+      <p>The extension is not directed to children under 13.</p>
+
+      <h2>Changes</h2>
+      <p>
+        Changes to this policy are published on this page and in the project's GitHub repository,
+        with the date above updated.
+      </p>
+
+      <h2>Contact</h2>
+      <p>
+        Questions or requests: open an issue at
+        <a href="https://github.com/jxmils/when2meet/issues">github.com/jxmils/when2meet/issues</a>.
+      </p>
+    </main>
+    <footer>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/terms">Terms</a>
+        <a href="https://github.com/jxmils/when2meet">GitHub</a>
+      </nav>
+    </footer>
+  </body>
+</html>

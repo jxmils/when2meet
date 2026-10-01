@@ -1,0 +1,18 @@
+{
+  "name": "@w2msync/providers",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Calendar busy-time adapters: Google Calendar free/busy, Microsoft Graph, ICS feeds.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "gen:windows-zones": "node scripts/gen-windows-zones.ts"
+  },
+  "dependencies": {
+    "@w2msync/core": "0.1.0",
+    "ical.js": "^2.2.1"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  // Deploy: see docs/SETUP_GOOGLE.md. Secrets are set with `npx wrangler secret put <NAME>`:
+  //   GOOGLE_CLIENT_SECRET  OAuth client secret (Web application client)
+  //   STATE_SECRET          random string used to sign OAuth state (e.g. `openssl rand -base64 32`)
+  "name": "when2meet-calendar-sync",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "html_handling": "drop-trailing-slash"
+  },
+  "vars": {
+    // OAuth client id of the Google "Web application" client.
+    "GOOGLE_CLIENT_ID": "",
+    // Comma-separated extension redirect URLs allowed to receive sign-in results, e.g.
+    // https://<chrome-extension-id>.chromiumapp.org/,https://<edge-extension-id>.chromiumapp.org/,
+    // https://<firefox-hash>.extensions.allizom.org/ (shown under Advanced in the extension settings).
+    "ALLOWED_REDIRECTS": ""
+  },
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 60, "period": 60 }
+    }
+  ],
+  "observability": { "enabled": false }
+}
