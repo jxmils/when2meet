@@ -5,9 +5,9 @@ import {
   countAvailable,
   defaultWeekStart,
   detectPollKind,
-  type FillMode,
   type FillPlan,
   type FillRecord,
+  mapSlots,
   planFill,
   recordFill,
   slotLengthSec,
@@ -18,7 +18,7 @@ import { type EventRef, eventKey, type PageState, type SaveOutcome } from '@w2ms
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { browser } from 'wxt/browser';
 import { DOCS, PRODUCT_NAME } from '../../lib/config.ts';
-import { formatCoverage, formatWeek, formatWeeks, plural } from '../../lib/format.ts';
+import { formatCoverage, formatRange, formatWeek, formatWeeks, plural } from '../../lib/format.ts';
 import {
   type ComputeResult,
   type PollChangedEvent,
@@ -45,13 +45,22 @@ interface Props {
   initial: PageState;
 }
 
+/** Where your When2meet answers and your calendar disagree: which one wins. */
+type Choice = 'keep' | 'follow';
+
 interface Preview {
   personId: number;
   baseline: Bits;
   compute: ComputeResult;
-  plan: FillPlan;
   record: FillRecord | null;
+  /** Your answers on When2meet win where they differ from the calendar. */
+  keep: FillPlan;
+  /** The calendar wins everywhere. */
+  follow: FillPlan;
+  choice: Choice;
 }
+
+const activePlan = (preview: Preview): FillPlan => preview[preview.choice];
 
 type Saved = Extract<SaveOutcome, { status: 'saved' | 'partial' }>;
 
@@ -68,8 +77,8 @@ type View =
 type Banner = { kind: 'changed'; count: number } | { kind: 'reconnect' } | { kind: 'other-tab' };
 
 interface FillOptions {
-  mode?: FillMode;
-  resetOverrides?: boolean;
+  /** Which side wins where When2meet and the calendar disagree (default depends on the poll). */
+  choice?: Choice;
   ignoreProblems?: boolean;
   /** Re-read calendars instead of reusing what was read moments ago (default: yes). */
   fresh?: boolean;
@@ -273,30 +282,38 @@ export function Panel({ page, pollRef, initial }: Props) {
         });
         return;
       }
-      const plan = planFill({
+      const planBase = {
         slots: poll.slots,
         server: server.bits,
         calendar: compute.bits,
         record,
         rulesHash: compute.rulesHash,
-        ...(options.mode ? { mode: options.mode } : {}),
-        ...(options.resetOverrides ? { resetOverrides: true } : {}),
-      });
-      if (plan.changes.length === 0 && plan.conflicts.length === 0) {
+      };
+      // First fill: keep = keep what was marked before, follow = calendar wins.
+      // Later fills: keep = keep changes made on When2meet since, follow = calendar wins.
+      const keep = planFill(record ? planBase : { ...planBase, mode: 'add' });
+      const follow = planFill(
+        record ? { ...planBase, resetOverrides: true } : { ...planBase, mode: 'replace' },
+      );
+      if (keep.changes.length === 0 && keep.conflicts.length === 0) {
         setView({ name: 'up-to-date' });
         return;
       }
-      const preview: Preview = { personId, baseline: server.bits, compute, plan, record };
-      // With nothing to save but slots marked that the calendar says are busy, show the preview
-      // so the user can choose to remove them.
-      if (current.settings.skipPreview && plan.changes.length > 0) {
+      const preview: Preview = {
+        personId,
+        baseline: server.bits,
+        compute,
+        record,
+        keep,
+        follow,
+        choice: options.choice ?? (record ? 'keep' : 'follow'),
+      };
+      // Only skip the preview when there's nothing to decide.
+      if (current.settings.skipPreview && keep.conflicts.length === 0) {
         await save(preview);
         return;
       }
-      showPreview(
-        plan.changes,
-        plan.conflicts.map((i) => poll.slots[i] as number),
-      );
+      showPlan(preview);
       scrollGridIntoView();
       setView({ name: 'preview', preview });
     } catch (error) {
@@ -309,8 +326,24 @@ export function Panel({ page, pollRef, initial }: Props) {
     }
   }
 
+  /** Highlights what the chosen plan changes, and (when keeping) the kept differences. */
+  function showPlan(preview: Preview) {
+    const kept = preview.choice === 'keep' ? preview.keep.conflicts : [];
+    showPreview(
+      activePlan(preview).changes,
+      kept.map((i) => poll.slots[i] as number),
+    );
+  }
+
+  function choose(preview: Preview, choice: Choice) {
+    const next = { ...preview, choice };
+    showPlan(next);
+    setView({ name: 'preview', preview: next });
+  }
+
   async function save(preview: Preview) {
-    const { personId, baseline, compute, plan } = preview;
+    const { personId, baseline, compute } = preview;
+    const plan = activePlan(preview);
     setView({ name: 'working', label: 'Saving to When2meet…' });
     try {
       const outcome = await page.call('save', {
@@ -708,7 +741,7 @@ export function Panel({ page, pollRef, initial }: Props) {
   }
 
   function renderPreview(preview: Preview) {
-    const { plan } = preview;
+    const plan = activePlan(preview);
     const adds = plan.changes.filter((c) => c.to === '1').length;
     const removes = plan.changes.length - adds;
     const reasons = new Set(plan.changes.map((c) => c.reason));
@@ -717,7 +750,7 @@ export function Panel({ page, pollRef, initial }: Props) {
         <p>
           {plan.changes.length === 0
             ? 'Nothing new from your calendar.'
-            : plan.kind === 'revisit'
+            : plan.kind === 'revisit' && preview.choice === 'keep'
               ? 'Your calendar changed since your last fill. Changes are highlighted on your grid.'
               : 'Here is what your calendar says. Changes are highlighted on your grid.'}
         </p>
@@ -729,23 +762,25 @@ export function Panel({ page, pollRef, initial }: Props) {
             {preview.compute.weeks} weeks.
           </p>
         )}
-        <div class="stats">
-          <div class="stat add">
-            <strong>{adds > 0 ? `+${adds}` : '0'}</strong>
-            <span class="muted">now available</span>
+        {plan.changes.length > 0 && (
+          <div class="stats">
+            <div class="stat add">
+              <strong>{adds > 0 ? `+${adds}` : '0'}</strong>
+              <span class="muted">now available</span>
+            </div>
+            <div class="stat remove">
+              <strong>{removes > 0 ? `−${removes}` : '0'}</strong>
+              <span class="muted">now unavailable</span>
+            </div>
           </div>
-          <div class="stat remove">
-            <strong>{removes > 0 ? `−${removes}` : '0'}</strong>
-            <span class="muted">now unavailable</span>
-          </div>
-        </div>
+        )}
         {reasons.has('settings') && (
           <p class="muted">Some changes come from your updated settings.</p>
         )}
         {reasons.has('new-slot') && (
           <p class="muted">The organizer added times since your last fill.</p>
         )}
-        {renderKeptNote(plan)}
+        {renderChoice(preview)}
         {weekdays && renderWeekPicker()}
         <div class="row">
           {plan.changes.length > 0 && (
@@ -761,56 +796,72 @@ export function Panel({ page, pollRef, initial }: Props) {
     );
   }
 
-  /** Explains slots that end up differing from the calendar, with a one-click switch. */
-  function renderKeptNote(plan: FillPlan) {
-    const n = plan.conflicts.length;
-    if (plan.kind === 'revisit' && n > 0) {
-      return (
-        <div class="note">
-          {plural(n, 'slot')} you changed by hand {n === 1 ? 'differs' : 'differ'} from your
-          calendar (outlined in yellow). {n === 1 ? "It's" : "They're"} kept.{' '}
-          <button
-            type="button"
-            class="link"
-            onClick={() => void fill({ resetOverrides: true, fresh: false })}
-          >
-            Use my calendar for {n === 1 ? 'it' : 'these'}
-          </button>
-        </div>
-      );
-    }
-    if (plan.kind === 'first' && plan.mode === 'add' && n > 0) {
-      return (
-        <div class="note">
-          {plural(n, 'slot')} you'd marked yourself {n === 1 ? 'is' : 'are'} busy in your calendar
-          (outlined in yellow). {n === 1 ? "It's" : "They're"} kept.{' '}
-          <button
-            type="button"
-            class="link"
-            onClick={() => void fill({ mode: 'replace', fresh: false })}
-          >
-            Use my calendar for {n === 1 ? 'it' : 'these'}
-          </button>
-        </div>
-      );
-    }
-    const removing = plan.changes.filter((c) => c.to === '0').length;
-    if (plan.kind === 'first' && plan.mode === 'replace' && removing > 0) {
-      return (
-        <p class="muted">
-          {plural(removing, 'slot')} you'd marked yourself {removing === 1 ? 'is' : 'are'} busy in
-          your calendar, so {removing === 1 ? "it's" : "they're"} removed.{' '}
-          <button
-            type="button"
-            class="link"
-            onClick={() => void fill({ mode: 'add', fresh: false })}
-          >
-            Keep {removing === 1 ? 'it' : 'them'}
-          </button>
+  /** Where When2meet and the imported calendar disagree: list the times, let the user pick. */
+  function renderChoice(preview: Preview) {
+    const n = preview.keep.conflicts.length;
+    if (n === 0) return null;
+    const { shown, more } = differenceRanges(preview);
+    const option = (choice: Choice, label: string) => (
+      <button
+        type="button"
+        aria-pressed={preview.choice === choice}
+        onClick={() => choose(preview, choice)}
+      >
+        {label}
+      </button>
+    );
+    return (
+      <div class="choice">
+        <p>
+          <strong>{plural(n, 'slot')}</strong> you
+          {preview.keep.kind === 'revisit' ? ' changed' : "'d marked"} on When2meet{' '}
+          {n === 1 ? "doesn't" : "don't"} match your imported calendar:
         </p>
-      );
+        <ul class="ranges">
+          {shown.map((r) => (
+            <li key={r.key}>{r.label}</li>
+          ))}
+          {more > 0 && <li>…and {plural(more, 'more time')}</li>}
+        </ul>
+        <div class="segmented">
+          {option('keep', 'Keep my When2meet edits')}
+          {option('follow', 'Follow imported calendar')}
+        </div>
+        {preview.choice === 'keep' && <p class="muted">Kept slots are outlined in yellow.</p>}
+      </div>
+    );
+  }
+
+  /** The differing slots as readable time ranges: the first three, plus how many more. */
+  function differenceRanges(preview: Preview) {
+    const { weekStart, timeZone: zone } = preview.compute;
+    const mapped = mapSlots(poll.slots, weekStart ? { weekStart, timeZone: zone } : {});
+    const slotSec = slotLengthSec(poll.slots);
+    const runs: { from: number; to: number; free: boolean }[] = [];
+    for (const i of preview.keep.conflicts) {
+      // Kept as it is on When2meet; the calendar says the opposite.
+      const free = preview.keep.target[i] === '1';
+      const last = runs[runs.length - 1];
+      const joins =
+        last !== undefined &&
+        last.free === free &&
+        (poll.slots[i] as number) - (poll.slots[last.to] as number) === slotSec;
+      if (last && joins) last.to = i;
+      else runs.push({ from: i, to: i, free });
     }
-    return null;
+    const shown = runs.slice(0, 3).map((r) => {
+      const start = mapped[r.from]?.start;
+      const end = mapped[r.to]?.end;
+      const when =
+        start !== undefined && end !== undefined
+          ? `${formatRange(start, end, zone, weekdays)}: `
+          : '';
+      return {
+        key: String(r.from),
+        label: `${when}${r.free ? 'free' : 'busy'} on When2meet, ${r.free ? 'busy' : 'free'} in calendar`,
+      };
+    });
+    return { shown, more: runs.length - shown.length };
   }
 
   function renderDone(props: {
