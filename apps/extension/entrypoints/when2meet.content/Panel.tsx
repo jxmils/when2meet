@@ -17,7 +17,7 @@ import { type EventRef, eventKey, type PageState, type SaveOutcome } from '@w2ms
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { browser } from 'wxt/browser';
 import { DOCS, PRODUCT_NAME } from '../../lib/config.ts';
-import { formatCoverage, formatWeek, plural } from '../../lib/format.ts';
+import { formatCoverage, formatWeek, formatWeeks, plural } from '../../lib/format.ts';
 import {
   type ComputeResult,
   type PollChangedEvent,
@@ -624,6 +624,18 @@ export function Panel({ page, pollRef, initial }: Props) {
     );
   }
 
+  function weekLabel(shown: string | null): string {
+    const weeks = status?.settings.weekdayPollWeeks ?? 1;
+    if (weeks > 1) {
+      return shown
+        ? `Checking your weeks of ${formatWeeks(shown, weeks)} (${weeks} weeks)`
+        : `Checks ${weeks} weeks of your calendar, starting ${status?.settings.weekdayPollWeek === 'this' ? 'this' : 'next'} week`;
+    }
+    return shown
+      ? `Using your week of ${formatWeek(shown)}`
+      : `Uses ${status?.settings.weekdayPollWeek === 'this' ? 'this' : 'next'} week from your calendar`;
+  }
+
   function renderWeekPicker() {
     const shown = week;
     const shift = (days: number) => {
@@ -643,9 +655,7 @@ export function Panel({ page, pollRef, initial }: Props) {
         >
           ‹
         </button>
-        <span>
-          {shown ? `Using your week of ${formatWeek(shown)}` : 'Uses next week from your calendar'}
-        </span>
+        <span>{weekLabel(shown)}</span>
         <button
           type="button"
           class="icon"
@@ -674,6 +684,13 @@ export function Panel({ page, pollRef, initial }: Props) {
               : 'Here is what your calendar says. Changes are highlighted on your grid.'}
         </p>
         {coverage && <p class="muted">This poll covers {coverage}.</p>}
+        {weekdays && preview.compute.weeks > 1 && (
+          <p class="muted">
+            You're marked free only at times you're free in{' '}
+            {preview.compute.match === 'all' ? 'every one' : 'most'} of those{' '}
+            {preview.compute.weeks} weeks.
+          </p>
+        )}
         <div class="stats">
           <div class="stat add">
             <strong>{adds > 0 ? `+${adds}` : '0'}</strong>

@@ -5,18 +5,21 @@
  *   LIVE_POLLS="https://www.when2meet.com/?123-abc,https://www.when2meet.com/?456-def" \
  *     npx playwright test e2e/live.spec.ts
  *
- * Each poll gets (or reuses) a participant named "calendar-sync live test".
+ * Each poll gets (or reuses) a participant named "calendar-sync live test". Set LIVE_WEEKS=10 to
+ * check days-of-the-week polls against 10 weeks instead of one.
  */
 import { type BrowserContext, test as base, chromium } from '@playwright/test';
 import {
   bitsForPerson,
   blockingIntervals,
+  combineWeeks,
   computeTargetBits,
   DEFAULT_RULES,
   defaultWeekStart,
   detectPollKind,
   localStamp,
   mapSlots,
+  mapWeekdayPollWeeks,
   resolveUnknown,
 } from '../packages/core/src/index.ts';
 import { icsBusy } from '../packages/providers/src/index.ts';
@@ -28,6 +31,7 @@ const POLLS = (process.env.LIVE_POLLS ?? '')
   .map((s) => s.trim())
   .filter(Boolean);
 const NAME = 'calendar-sync live test';
+const WEEKS = Number(process.env.LIVE_WEEKS ?? 1);
 
 const test = base.extend<{ context: BrowserContext; extensionId: string }>({
   // biome-ignore lint/correctness/noEmptyPattern: Playwright fixture signature
@@ -84,21 +88,33 @@ for (const url of POLLS) {
         end: first.start + 5 * 3_600_000,
         summary: 'Live test B',
       },
+      // Only in week 3: counts for multi-week checks of days-of-the-week polls.
+      {
+        start: first.start + 14 * 86_400_000 + 3 * 3_600_000,
+        end: first.start + 14 * 86_400_000 + 4 * 3_600_000,
+        summary: 'Live test C (week 3)',
+      },
     ]).replace('END:VCALENDAR', `${weekly}\r\nEND:VCALENDAR`);
     const blocks = icsBusy(ics, {
       range: { start: first.start - 86_400_000, end: Number.MAX_SAFE_INTEGER },
       timeZone: TZ,
     });
-    const calendar = computeTargetBits({
-      slots: mapped,
-      blocking: blockingIntervals(blocks, DEFAULT_RULES, TZ),
-      rules: DEFAULT_RULES,
-      timeZone: TZ,
-      now: Date.now(),
-    });
+    const blocking = blockingIntervals(blocks, DEFAULT_RULES, TZ);
+    const target = (slots: typeof mapped) =>
+      computeTargetBits({ slots, blocking, rules: DEFAULT_RULES, timeZone: TZ, now: Date.now() });
+    // Days-of-the-week polls checked over several weeks (LIVE_WEEKS): free only if free every week.
+    const calendar =
+      kind === 'weekdays' && WEEKS > 1
+        ? combineWeeks(mapWeekdayPollWeeks(poll.slots, weekStart, WEEKS, TZ).map(target), 'all')
+        : target(mapped);
 
     const page = await context.newPage();
     await setUp(page, extensionId, { name: NAME, ics });
+    if (WEEKS > 1) {
+      const weeksInput = page.getByLabel(/check this many weeks/);
+      await weeksInput.fill(String(WEEKS));
+      await weeksInput.press('Tab');
+    }
     await page.goto(url);
     await page.waitForLoadState('networkidle');
     const grid = await page.evaluate(() => ({

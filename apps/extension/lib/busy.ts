@@ -2,13 +2,15 @@
 import {
   type BusyBlock,
   blockingIntervals,
+  combineWeeks,
   computeTargetBits,
   defaultWeekStart,
   detectPollKind,
   hashOf,
   type Interval,
+  MAX_WEEKS,
   mapSlots,
-  rulesHash,
+  mapWeekdayPollWeeks,
   span,
   systemTimeZone,
 } from '@w2msync/core';
@@ -42,17 +44,25 @@ export async function computeTarget(
     kind === 'weekdays'
       ? (request.weekStart ?? defaultWeekStart(now, timeZone, settings.weekdayPollWeek))
       : null;
-  const mapped = mapSlots(request.slots, { kind, ...(weekStart ? { weekStart, timeZone } : {}) });
+  // A days-of-the-week poll can be checked against several real weeks (e.g. a whole term).
+  const weeks = weekStart ? Math.min(MAX_WEEKS, Math.max(1, settings.weekdayPollWeeks)) : 1;
+  const match = settings.weekdayPollMatch;
+  const mappedWeeks = weekStart
+    ? mapWeekdayPollWeeks(request.slots, weekStart, weeks, timeZone)
+    : [mapSlots(request.slots, { kind })];
   const accounts = (await loadAccounts()).filter((a) => a.enabled);
   const sourcesHash = hashOf(
     accounts.map((a) => [a.id, a.calendars?.filter((c) => c.enabled).map((c) => c.id) ?? null]),
   );
-  const covered = span(mapped);
+  const covered = span(mappedWeeks.flat());
   const base = {
     kind,
     weekStart,
+    weeks,
+    match,
     timeZone,
-    rulesHash: rulesHash(settings.rules),
+    // Changing how many weeks are checked counts as a settings change, like the rules.
+    rulesHash: hashOf({ rules: settings.rules, weekly: weekStart ? { weeks, match } : null }),
     sourcesHash,
   };
   if (!covered) {
@@ -82,7 +92,10 @@ export async function computeTarget(
     }),
   );
   const blocking = blockingIntervals(blocks, settings.rules, timeZone);
-  const bits = computeTargetBits({ slots: mapped, blocking, rules: settings.rules, timeZone, now });
+  const perWeek = mappedWeeks.map((mapped) =>
+    computeTargetBits({ slots: mapped, blocking, rules: settings.rules, timeZone, now }),
+  );
+  const bits = perWeek.length === 1 ? (perWeek[0] as string) : combineWeeks(perWeek, match);
   return { ...base, bits, range, problems, sourcesRead };
 }
 

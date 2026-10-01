@@ -125,20 +125,22 @@ function planRevisit(input: PlanInput, record: FillRecord): FillPlan {
     const t: BitChar = overrides[key] ?? (c === '0' || c === '1' ? c : s);
     target += t;
     if (t !== s) {
-      changes.push({ index: i, slot, to: t, reason: changeReason(key, c, record, rulesHash) });
+      changes.push({ index: i, slot, to: t, reason: changeReason(key, record, rulesHash) });
     }
   }
   return { kind: 'revisit', mode: record.mode, target, changes, conflicts: [], overrides };
 }
 
+/**
+ * Why a slot changes on a revisit. When the settings changed since the last fill they also change
+ * the calendar-derived bits, so they're named as the cause; otherwise it's the calendar.
+ */
 function changeReason(
   key: string,
-  calendarBit: string | undefined,
   record: FillRecord,
   rulesHash: string | undefined,
 ): ChangeReason {
   if (record.applied[key] === undefined && record.calendar[key] === undefined) return 'new-slot';
-  if (record.calendar[key] !== calendarBit) return 'calendar';
   if (rulesHash !== undefined && rulesHash !== record.rulesHash) return 'settings';
   return 'calendar';
 }

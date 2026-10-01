@@ -15,7 +15,7 @@ Fill your [When2meet](https://www.when2meet.com) availability from **Google Cale
 - **Updates when your calendar changes.** Reopen a poll you filled and you'll be told if your calendar changed, with a one-click update. Slots you changed by hand are kept.
 - **Your rules.** Buffers around meetings, working hours, minimum free stretch, and how to treat tentative, out-of-office, working-elsewhere and all-day events.
 - **Term-long polls.** Polls that span many weeks, such as a whole term, work the same way. Weekly classes keep their local time across clock changes, and the preview shows the dates covered.
-- **Days-of-the-week polls.** Pick which real week to read (next week by default).
+- **Days-of-the-week polls.** Pick which real week to read (next week by default), or check several weeks, such as a whole term. You're then marked free only at times you're free every week, or in most weeks.
 - **Best times.** See the windows that work for the most people and add one to Google Calendar, Outlook or any calendar (.ics), with no write access to your calendar.
 - **Private by design.** Calendars are read in your browser with read-only, least-privilege access (Google free/busy only). Only the slots you save, and your name, go to When2meet. No analytics. See [PRIVACY.md](docs/PRIVACY.md).
 

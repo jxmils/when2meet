@@ -1,5 +1,6 @@
 import {
   dayOfWeek,
+  defaultWeekStart,
   formatPlainDate,
   localDate,
   mapSlots,
@@ -284,4 +285,70 @@ test('offers to clear marked slots that clash with the calendar, even with nothi
   await page.getByRole('button', { name: 'Save to When2meet' }).click();
   await expect(page.getByText(/checked against When2meet/)).toBeVisible();
   expect(mock.bitsFor(dates.id, 777)).toBe(expected);
+});
+
+test('checks a days-of-the-week poll against a whole term of weeks', async ({
+  context,
+  extensionId,
+  mock,
+}) => {
+  // The seeded weekly poll is Monday–Friday, 10:00–16:00: 24 slots a day, Monday first.
+  const slots = mock.polls.get(weekdays.id)?.slots ?? [];
+  expect(slots).toHaveLength(5 * 24);
+  const firstMonday = addDays(defaultWeekStart(Date.now(), LONDON, 'next'), 1);
+  const stamp = (date: string, hhmm: string) => `${date.replace(/-/g, '')}T${hhmm}00`;
+  const tuesdayWeek3 = addDays(firstMonday, 15);
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//w2msync e2e//EN',
+    // A class on Mondays 10:00–11:00 for 8 of the 10 weeks.
+    'BEGIN:VEVENT',
+    'UID:class@test',
+    'DTSTAMP:20260101T000000Z',
+    `DTSTART;TZID=Europe/London:${stamp(firstMonday, '1000')}`,
+    `DTEND;TZID=Europe/London:${stamp(firstMonday, '1100')}`,
+    'RRULE:FREQ=WEEKLY;COUNT=8',
+    'END:VEVENT',
+    // A one-off on the third Tuesday, 10:00–12:00.
+    'BEGIN:VEVENT',
+    'UID:one-off@test',
+    'DTSTAMP:20260101T000000Z',
+    `DTSTART;TZID=Europe/London:${stamp(tuesdayWeek3, '1000')}`,
+    `DTEND;TZID=Europe/London:${stamp(tuesdayWeek3, '1200')}`,
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+
+  const page = await context.newPage();
+  await setUp(page, extensionId, { name: 'Jordan Lee', ics, timeZone: LONDON });
+  const weeksInput = page.getByLabel(/check this many weeks/);
+  await weeksInput.fill('10');
+  await weeksInput.press('Tab');
+  await expect(page.getByLabel(/Count a weekday time as free/)).toHaveValue('all');
+
+  const busyAt = (ranges: [number, number][]) =>
+    slots.map((_, i) => (ranges.some(([from, to]) => i >= from && i < to) ? '0' : '1')).join('');
+  const mondayClass: [number, number] = [0, 4];
+  const tuesdayOneOff: [number, number] = [24, 32];
+
+  await page.goto(pollUrl(weekdays));
+  await page.getByRole('button', { name: /Fill from my calendar|Calendar changed/ }).click();
+  await expect(page.getByText(/Checking your weeks of .* \(10 weeks\)/)).toBeVisible();
+  await expect(page.getByText(/free in every one of those 10 weeks/)).toBeVisible();
+  await page.getByRole('button', { name: 'Save to When2meet' }).click();
+  await expect(page.getByText(/checked against When2meet/)).toBeVisible();
+  const personId = mock.personByName(weekdays.id, 'Jordan Lee')?.id ?? 0;
+  expect(mock.bitsFor(weekdays.id, personId)).toBe(busyAt([mondayClass, tuesdayOneOff]));
+
+  // "Most weeks" ignores the one-off but still respects the class (8 of 10 weeks).
+  await page.goto(`chrome-extension://${extensionId}/options.html`);
+  await page.getByLabel(/Count a weekday time as free/).selectOption('most');
+  await page.goto(pollUrl(weekdays));
+  await page.getByRole('button', { name: /Fill from my calendar|Calendar changed/ }).click();
+  await expect(page.getByText(/free in most of those 10 weeks/)).toBeVisible();
+  await expect(page.getByText('Some changes come from your updated settings.')).toBeVisible();
+  await page.getByRole('button', { name: 'Save to When2meet' }).click();
+  await expect(page.getByText(/checked against When2meet/)).toBeVisible();
+  expect(mock.bitsFor(weekdays.id, personId)).toBe(busyAt([mondayClass]));
 });
