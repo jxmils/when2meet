@@ -72,6 +72,7 @@ export async function computeTarget(
       range: null,
       problems: [],
       sourcesRead: 0,
+      readAt: now,
     };
   }
 
@@ -81,10 +82,13 @@ export async function computeTarget(
   const blocks: BusyBlock[] = [];
   const problems: SourceProblem[] = [];
   let sourcesRead = 0;
+  let readAt = Date.now();
   await Promise.all(
     accounts.map(async (account) => {
       try {
-        blocks.push(...(await busyFor(account, range, timeZone, request)));
+        const result = await busyFor(account, range, timeZone, request);
+        blocks.push(...result.blocks);
+        readAt = Math.min(readAt, result.at);
         sourcesRead++;
       } catch (error) {
         problems.push(problemFor(account, error));
@@ -96,7 +100,7 @@ export async function computeTarget(
     computeTargetBits({ slots: mapped, blocking, rules: settings.rules, timeZone, now }),
   );
   const bits = perWeek.length === 1 ? (perWeek[0] as string) : combineWeeks(perWeek, match);
-  return { ...base, bits, range, problems, sourcesRead };
+  return { ...base, bits, range, problems, sourcesRead, readAt };
 }
 
 async function busyFor(
@@ -104,25 +108,27 @@ async function busyFor(
   range: Interval,
   timeZone: string,
   request: { interactive: boolean; fresh?: boolean },
-): Promise<BusyBlock[]> {
+): Promise<{ blocks: BusyBlock[]; at: number }> {
   const cacheKey = `busy:${account.id}:${hashOf([account.calendars ?? null, range, timeZone])}`;
   if (!request.fresh) {
     const hit = (await browser.storage.session.get(cacheKey))[cacheKey] as
       | { at: number; blocks: BusyBlock[] }
       | undefined;
-    if (hit && Date.now() - hit.at < BUSY_CACHE_MS) return hit.blocks;
+    if (hit && Date.now() - hit.at < BUSY_CACHE_MS) return hit;
   }
-  const blocks = await readBusy(account, range, timeZone, request.interactive);
-  await browser.storage.session.set({ [cacheKey]: { at: Date.now(), blocks } });
-  return blocks;
+  const read = await readBusy(account, range, timeZone, request);
+  await browser.storage.session.set({ [cacheKey]: read });
+  return read;
 }
 
 async function readBusy(
   account: Account,
   range: Interval,
   timeZone: string,
-  interactive: boolean,
-): Promise<BusyBlock[]> {
+  request: { interactive: boolean; fresh?: boolean },
+): Promise<{ blocks: BusyBlock[]; at: number }> {
+  const { interactive } = request;
+  const at = Date.now();
   const client: ApiClient = {
     token: (options) =>
       getAccessToken(account, {
@@ -135,7 +141,7 @@ async function readBusy(
       account,
       account.provider === 'google' ? 'primary' : DEFAULT_CALENDAR,
     );
-    if (calendars.length === 0) return [];
+    if (calendars.length === 0) return { blocks: [], at };
     const result =
       account.provider === 'google'
         ? await googleBusy(client, calendars, range)
@@ -149,22 +155,43 @@ async function readBusy(
         `Could not read ${names.join(', ')} (${result.errors[0]?.reason}).`,
       );
     }
-    return result.blocks;
+    return { blocks: result.blocks, at };
   }
   const secret = await getSecret(account.id);
-  const text = account.icsKind === 'file' ? secret?.icsText : await fetchIcs(secret?.icsUrl ?? '');
+  const feed =
+    account.icsKind === 'file'
+      ? { text: secret?.icsText, at }
+      : await cachedFeed(account.id, secret?.icsUrl ?? '', request.fresh === true);
+  const text = feed.text;
   if (!text)
     throw new AppError('reconnect', 'This calendar has no data. Add it again in settings.');
   try {
-    return icsBusy(text, {
+    const blocks = icsBusy(text, {
       range,
       timeZone,
       ...(account.email ? { ownerEmails: [account.email] } : {}),
     });
+    return { blocks, at: feed.at };
   } catch (error) {
     if (error instanceof IcsParseError) throw new AppError('failed', error.message);
     throw error;
   }
+}
+
+const FEED_CACHE_MS = 2 * 60_000;
+
+/** A calendar link's contents, re-downloaded unless fetched in the last 2 minutes (or `fresh`). */
+async function cachedFeed(accountId: string, url: string, fresh: boolean) {
+  const key = `feed:${accountId}`;
+  if (!fresh) {
+    const hit = (await browser.storage.session.get(key))[key] as
+      | { at: number; text: string }
+      | undefined;
+    if (hit && Date.now() - hit.at < FEED_CACHE_MS) return hit;
+  }
+  const feed = { at: Date.now(), text: await fetchIcs(url) };
+  await browser.storage.session.set({ [key]: feed });
+  return feed;
 }
 
 /** Accepts webcal:// and https:// links; returns the https URL. */
@@ -176,7 +203,8 @@ export function normalizeIcsUrl(input: string): string {
   } catch {
     throw new AppError('invalid', 'That is not a valid link.');
   }
-  if (url.protocol !== 'https:') {
+  const local = url.protocol === 'http:' && /^(localhost|127\.0\.0\.1)$/.test(url.hostname);
+  if (url.protocol !== 'https:' && !(__W2M_DEV_HOSTS__ && local)) {
     throw new AppError('invalid', 'Calendar links must start with https:// or webcal://.');
   }
   return url.href;

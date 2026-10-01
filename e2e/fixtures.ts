@@ -8,9 +8,10 @@ import {
   seedPolls,
 } from '../tools/mock-when2meet/src/index.ts';
 
+/** The end-to-end build (`npm run build:e2e`): the real extension, also allowed on localhost. */
 export const EXTENSION_DIR = path.resolve(
   import.meta.dirname,
-  '../apps/extension/.output/chrome-mv3',
+  '../apps/extension/.output/chrome-mv3-e2e',
 );
 export const TZ = 'America/New_York';
 export { SEED_POLLS };
