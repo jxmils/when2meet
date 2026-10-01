@@ -57,6 +57,14 @@ export const test = base.extend<Fixtures>({
 
 export const expect = test.expect;
 
+/** Opens the collapsed "More settings" part of the options page. */
+export async function openMoreSettings(page: Page) {
+  const more = page.locator('details.more');
+  if (!(await more.evaluate((el) => (el as HTMLDetailsElement).open))) {
+    await page.getByText('More settings').click();
+  }
+}
+
 /** Options page: set the name and timezone, then import an .ics file. */
 export async function setUp(
   page: Page,
@@ -67,10 +75,11 @@ export async function setUp(
   const name = page.getByLabel('Name', { exact: true });
   await name.fill(options.name);
   await name.press('Tab');
+  await openMoreSettings(page);
   const timezone = page.getByLabel('Timezone');
   await timezone.fill(options.timeZone ?? TZ);
   await timezone.press('Tab');
-  await page.getByText('Import an .ics file').click();
+  await page.getByRole('button', { name: /Apple & others/ }).click();
   await page.getByLabel('Calendar file').setInputFiles({
     name: 'calendar.ics',
     mimeType: 'text/calendar',

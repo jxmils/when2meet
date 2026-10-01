@@ -15,6 +15,9 @@ import { type Settings, saveSettings } from '../../lib/settings.ts';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+type Provider = 'outlook' | 'google' | 'other';
+type Run = (label: string, task: () => Promise<unknown>, done?: string) => Promise<void>;
+
 export function App() {
   const [status, setStatus] = useState<Status | null>(null);
   const [message, setMessage] = useState<{
@@ -23,7 +26,7 @@ export function App() {
     code?: string;
   } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const welcome = location.hash === '#welcome';
+  const [adding, setAdding] = useState<Provider | null>(null);
 
   const reload = () => send('getStatus').then(setStatus);
   useEffect(() => {
@@ -52,36 +55,41 @@ export function App() {
 
   if (!status) return <main class="page">Loading…</main>;
   const { settings, accounts, features } = status;
+  const hasName = settings.displayName !== '';
+  const hasCalendar = accounts.some((a) => a.enabled);
+
+  /** Sign in when that's available; otherwise show the 3-step "paste a link" guide. */
+  function pick(provider: Provider) {
+    if (provider === 'outlook' && features.microsoft) {
+      void run(
+        'Signing in to Microsoft',
+        () => send('connect', { provider: 'microsoft' }),
+        'Outlook connected.',
+      );
+      setAdding(null);
+    } else if (provider === 'google' && features.google) {
+      void run(
+        'Signing in to Google',
+        () => send('connect', { provider: 'google' }),
+        'Google Calendar connected.',
+      );
+      setAdding(null);
+    } else {
+      setAdding(adding === provider ? null : provider);
+    }
+  }
+
+  const added = async () => {
+    setAdding(null);
+    await reload();
+  };
 
   return (
     <main class="page">
       <header>
-        <img src="/icon/48.png" alt="" width="40" height="40" />
-        <div>
-          <h1>{PRODUCT_NAME}</h1>
-          <p class="muted">Unofficial helper. Not affiliated with When2meet.</p>
-        </div>
+        <img src="/icon/48.png" alt="" width="36" height="36" />
+        <h1>{PRODUCT_NAME}</h1>
       </header>
-
-      {(welcome || accounts.length === 0) && (
-        <section class="welcome">
-          <h2>Welcome! Three steps and you're set</h2>
-          <ol>
-            <li>Tell us the name you use on polls.</li>
-            <li>Connect your calendars below (as many as you like).</li>
-            <li>
-              Open any When2meet poll and click <strong>Fill from my calendar</strong>.
-            </li>
-          </ol>
-          <p class="muted">
-            Your calendar is read in your browser, and only free/busy times are used. Nothing is
-            sent to us.{' '}
-            <a href={DOCS.privacy} target="_blank" rel="noreferrer">
-              Privacy details
-            </a>
-          </p>
-        </section>
-      )}
 
       <div role="status" aria-live="polite">
         {message && (
@@ -92,8 +100,8 @@ export function App() {
                 {' '}
                 <a href={DOCS.itAdmins} target="_blank" rel="noreferrer">
                   What to send your IT team
-                </a>{' '}
-                · or add your calendar as a link below.
+                </a>
+                , or add Outlook with a link instead.
               </>
             )}
           </p>
@@ -101,64 +109,25 @@ export function App() {
         {busy && <p class="banner">{busy}…</p>}
       </div>
 
-      <section>
-        <h2>Your name on polls</h2>
-        <label>
-          Name
-          <input
-            value={settings.displayName}
-            placeholder="e.g. Alex Kim"
-            onChange={(e) =>
-              void update({ displayName: (e.target as HTMLInputElement).value.trim() })
-            }
-          />
-        </label>
-        <p class="muted">Used to sign in to polls for you. You can change it on any poll.</p>
+      <section class="step">
+        <h2>
+          <span class={hasName ? 'num done' : 'num'}>{hasName ? '✓' : '1'}</span> Your name on polls
+        </h2>
+        <input
+          aria-label="Name"
+          value={settings.displayName}
+          placeholder="e.g. Alex Kim"
+          onChange={(e) =>
+            void update({ displayName: (e.target as HTMLInputElement).value.trim() })
+          }
+        />
       </section>
 
-      <section>
-        <h2>Calendars</h2>
-        <div class="row">
-          <button
-            type="button"
-            class="primary"
-            disabled={!features.google || busy !== null}
-            onClick={() =>
-              void run(
-                'Waiting for Google',
-                () => send('connect', { provider: 'google' }),
-                'Google Calendar connected.',
-              )
-            }
-          >
-            Connect Google Calendar
-          </button>
-          <button
-            type="button"
-            class="primary"
-            disabled={!features.microsoft || busy !== null}
-            onClick={() =>
-              void run(
-                'Waiting for Microsoft',
-                () => send('connect', { provider: 'microsoft' }),
-                'Outlook connected.',
-              )
-            }
-          >
-            Connect Outlook / Microsoft 365
-          </button>
-        </div>
-        {(!features.google || !features.microsoft) && (
-          <p class="muted">
-            One-click sign-in for{' '}
-            {[!features.google && 'Google', !features.microsoft && 'Microsoft']
-              .filter(Boolean)
-              .join(' and ')}{' '}
-            isn't set up in this build. Calendar links below work with every provider.
-          </p>
-        )}
-        <AddCalendarLink onAdded={reload} run={run} />
-        <ImportFile run={run} />
+      <section class="step">
+        <h2>
+          <span class={hasCalendar ? 'num done' : 'num'}>{hasCalendar ? '✓' : '2'}</span> Your
+          calendar
+        </h2>
         {accounts.length > 0 && (
           <ul class="accounts">
             {accounts.map((account) => (
@@ -166,192 +135,160 @@ export function App() {
             ))}
           </ul>
         )}
-      </section>
-
-      <RulesSection rules={settings.rules} update={(rules) => void update({ rules })} />
-
-      <section>
-        <h2>Polls</h2>
-        <div class="grid2">
-          <label>
-            Days-of-the-week polls start from
-            <select
-              value={settings.weekdayPollWeek}
-              onChange={(e) =>
-                void update({
-                  weekdayPollWeek: (e.target as HTMLSelectElement).value as 'this' | 'next',
-                })
-              }
+        <div class="tiles">
+          {(
+            [
+              ['outlook', 'Outlook'],
+              ['google', 'Google'],
+              ['other', 'Apple & others'],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              class={adding === id ? 'tile active' : 'tile'}
+              aria-expanded={adding === id}
+              disabled={busy !== null}
+              onClick={() => pick(id)}
             >
-              <option value="next">next week</option>
-              <option value="this">this week</option>
-            </select>
-          </label>
-          <label>
-            …and check this many weeks
-            <input
-              type="number"
-              min={1}
-              max={MAX_WEEKS}
-              value={settings.weekdayPollWeeks}
-              onChange={(e) => {
-                const weeks = Math.round(Number((e.target as HTMLInputElement).value) || 1);
-                void update({ weekdayPollWeeks: Math.min(MAX_WEEKS, Math.max(1, weeks)) });
-              }}
-            />
-          </label>
+              {accounts.length ? `+ ${label}` : label}
+            </button>
+          ))}
         </div>
-        {settings.weekdayPollWeeks > 1 ? (
-          <label>
-            Count a weekday time as free when I'm free
-            <select
-              value={settings.weekdayPollMatch}
-              onChange={(e) =>
-                void update({
-                  weekdayPollMatch: (e.target as HTMLSelectElement).value as 'all' | 'most',
-                })
-              }
-            >
-              <option value="all">in every one of those weeks</option>
-              <option value="most">in most of those weeks (ignores one-off events)</option>
-            </select>
-          </label>
-        ) : (
+        {adding && <LinkGuide provider={adding} run={run} onAdded={added} />}
+      </section>
+
+      <section class="step">
+        <h2>
+          <span class="num">3</span> Fill a poll
+        </h2>
+        <p>
+          Open any When2meet poll and click <strong>Fill from my calendar</strong>.
+        </p>
+      </section>
+
+      <details class="more">
+        <summary>More settings</summary>
+        <RulesSection rules={settings.rules} update={(rules) => void update({ rules })} />
+        <PollsSection
+          settings={settings}
+          update={update}
+          onError={(text) => setMessage({ kind: 'error', text })}
+        />
+        <section>
+          <h3>Privacy</h3>
           <p class="muted">
-            Picking a weekly time for a whole term? Check 10 or more weeks so you're only marked
-            free when you're free every week.
+            Your calendar is read in this browser. Only your free times and name go to When2meet.{' '}
+            <a href={DOCS.privacy} target="_blank" rel="noreferrer">
+              Privacy policy
+            </a>
           </p>
-        )}
-        <label>
-          Timezone
-          <input
-            list="timezones"
-            value={settings.timeZone}
-            placeholder={`Automatic (${systemTimeZone()})`}
-            onChange={(e) => {
-              const timeZone = (e.target as HTMLInputElement).value.trim();
-              if (timeZone && !isValidTimeZone(timeZone)) {
-                setMessage({
-                  kind: 'error',
-                  text: `"${timeZone}" is not a timezone. Pick one from the list.`,
-                });
-                return;
+          <button
+            type="button"
+            class="danger"
+            onClick={() => {
+              if (confirm('Disconnect all calendars and erase everything this extension stored?')) {
+                void run('Erasing', () => send('resetAll'), 'Everything was erased.');
               }
-              void update({ timeZone });
             }}
-          />
-          <datalist id="timezones">
-            {Intl.supportedValuesOf('timeZone').map((tz) => (
-              <option key={tz} value={tz} />
-            ))}
-          </datalist>
-        </label>
-        <label>
-          Meeting length for "best times" (minutes)
-          <input
-            type="number"
-            min={15}
-            step={15}
-            value={settings.meetingMinutes}
-            onChange={(e) =>
-              void update({
-                meetingMinutes: Math.max(15, Number((e.target as HTMLInputElement).value) || 60),
-              })
-            }
-          />
-        </label>
-        <label>
-          "Add to Outlook" opens
-          <select
-            value={settings.outlookAccount}
-            onChange={(e) =>
-              void update({
-                outlookAccount: (e.target as HTMLSelectElement).value as 'work' | 'personal',
-              })
-            }
           >
-            <option value="work">Outlook for work or school (outlook.office.com)</option>
-            <option value="personal">Outlook.com (outlook.live.com)</option>
-          </select>
-        </label>
-        <Check
-          label="When I reopen a poll I filled, tell me if my calendar changed"
-          checked={settings.checkOnOpen}
-          onChange={(checkOnOpen) => void update({ checkOnOpen })}
-        />
-        <Check
-          label="Save right away, without a preview (true one-click)"
-          checked={settings.skipPreview}
-          onChange={(skipPreview) => void update({ skipPreview })}
-        />
-      </section>
-
-      <section>
-        <h2>Privacy and data</h2>
-        <p class="muted">
-          Calendar events are read by this extension in your browser and turned into free/busy
-          slots. Only those slots, and your name, are sent to When2meet. Tokens and calendar links
-          stay in this browser. Google sign-in passes through our small open-source sign-in service,
-          which stores nothing.
-        </p>
-        <button
-          type="button"
-          class="danger"
-          onClick={() => {
-            if (confirm('Disconnect all calendars and erase everything this extension stored?')) {
-              void run('Erasing', () => send('resetAll'), 'Everything was erased.');
-            }
-          }}
-        >
-          Disconnect everything and erase data
-        </button>
-      </section>
-
-      <details>
-        <summary>Advanced</summary>
-        <p class="muted">
-          Redirect URL for self-hosted OAuth apps: <code>{status.redirectUrl}</code>
-        </p>
-        {MICROSOFT_CLIENT_ID && (
+            Disconnect everything and erase data
+          </button>
+        </section>
+        <section>
+          <h3>Advanced</h3>
           <p class="muted">
-            Microsoft application (client) id, for IT admins: <code>{MICROSOFT_CLIENT_ID}</code>
+            Redirect URL for self-hosted OAuth apps: <code>{status.redirectUrl}</code>
           </p>
-        )}
-        {GOOGLE_BROKER_URL && (
+          {MICROSOFT_CLIENT_ID && (
+            <p class="muted">
+              Microsoft application (client) id, for IT admins: <code>{MICROSOFT_CLIENT_ID}</code>
+            </p>
+          )}
+          {GOOGLE_BROKER_URL && (
+            <p class="muted">
+              Google sign-in service: <code>{GOOGLE_BROKER_URL}</code>
+            </p>
+          )}
           <p class="muted">
-            Google sign-in service: <code>{GOOGLE_BROKER_URL}</code>
+            Version {browser.runtime.getManifest().version} ·{' '}
+            <a href={REPO_URL} target="_blank" rel="noreferrer">
+              Source code
+            </a>{' '}
+            ·{' '}
+            <a href={DOCS.issues} target="_blank" rel="noreferrer">
+              Report a problem
+            </a>{' '}
+            · Unofficial; not affiliated with When2meet.
           </p>
-        )}
-        <p class="muted">
-          Version {browser.runtime.getManifest().version} ·{' '}
-          <a href={REPO_URL} target="_blank" rel="noreferrer">
-            Source code
-          </a>{' '}
-          ·{' '}
-          <a href={DOCS.issues} target="_blank" rel="noreferrer">
-            Report a problem
-          </a>
-        </p>
+        </section>
       </details>
     </main>
   );
 }
 
-type Run = (label: string, task: () => Promise<unknown>, done?: string) => Promise<void>;
+const GUIDES: Record<Provider, { open?: [string, string]; steps: preact.ComponentChildren[] }> = {
+  outlook: {
+    open: ['Open Outlook', 'https://outlook.office.com/calendar/'],
+    steps: [
+      <>
+        Go to <strong>⚙ Settings → Calendar → Shared calendars</strong>.
+      </>,
+      <>
+        Under <strong>Publish a calendar</strong>, pick your calendar and{' '}
+        <strong>Can view when I'm busy</strong>, then <strong>Publish</strong>.
+      </>,
+      <>
+        Copy the <strong>ICS</strong> link and paste it below.
+      </>,
+    ],
+  },
+  google: {
+    open: ['Open Google Calendar settings', 'https://calendar.google.com/calendar/r/settings'],
+    steps: [
+      <>Click your calendar on the left.</>,
+      <>
+        Copy <strong>Secret address in iCal format</strong> and paste it below.
+      </>,
+    ],
+  },
+  other: {
+    steps: [
+      <>
+        Copy your calendar's subscribe link (starts with <code>webcal://</code> or{' '}
+        <code>https://</code>).{' '}
+        <a href={DOCS.calendarLinks} target="_blank" rel="noreferrer">
+          Where to find it
+        </a>
+      </>,
+    ],
+  },
+};
 
-function AddCalendarLink({ run }: { onAdded: () => void; run: Run }) {
+/** The short "paste a link" flow, for providers without sign-in and for everything else. */
+function LinkGuide({
+  provider,
+  run,
+  onAdded,
+}: {
+  provider: Provider;
+  run: Run;
+  onAdded: () => void;
+}) {
   const [url, setUrl] = useState('');
-  const [label, setLabel] = useState('');
+  const guide = GUIDES[provider];
+  const label = provider === 'outlook' ? 'Outlook' : provider === 'google' ? 'Google Calendar' : '';
+
   async function add() {
     const href = url.trim().replace(/^webcals?:\/\//i, 'https://');
     let origin: string;
     try {
       origin = new URL(href).origin;
     } catch {
-      await run('Checking', () => Promise.reject(new Error('That is not a valid link.')));
+      await run('Checking', () => Promise.reject(new Error("That doesn't look like a link.")));
       return;
     }
-    // Must be requested directly from the click, before any await.
+    // Must be requested directly from the click, before any other await.
     const granted = await browser.permissions.request({ origins: [`${origin}/*`] });
     if (!granted) {
       await run('Checking', () =>
@@ -362,69 +299,69 @@ function AddCalendarLink({ run }: { onAdded: () => void; run: Run }) {
       return;
     }
     await run(
-      'Reading the calendar',
-      () => send('addIcs', { url: href, label: label.trim() }),
+      'Reading your calendar',
+      () => send('addIcs', { url: href, label }),
       'Calendar added.',
     );
     setUrl('');
-    setLabel('');
+    onAdded();
   }
-  return (
-    <details class="add">
-      <summary>Add a calendar link (Apple iCloud, Outlook, Google, Proton, Fastmail…)</summary>
-      <label>
-        Calendar link (https:// or webcal://)
-        <input
-          value={url}
-          onInput={(e) => setUrl((e.target as HTMLInputElement).value)}
-          placeholder="webcal://…"
-        />
-      </label>
-      <label>
-        Name (optional)
-        <input
-          value={label}
-          onInput={(e) => setLabel((e.target as HTMLInputElement).value)}
-          placeholder="Work calendar"
-        />
-      </label>
-      <button type="button" class="secondary" disabled={!url.trim()} onClick={() => void add()}>
-        Add calendar
-      </button>
-      <p class="muted">
-        Where to find the link:{' '}
-        <a href={DOCS.calendarLinks} target="_blank" rel="noreferrer">
-          step-by-step for each provider
-        </a>
-        . Outlook's "Can view when I'm busy" link shares only free/busy times. Treat these links
-        like passwords; they stay in this browser.
-      </p>
-    </details>
-  );
-}
 
-function ImportFile({ run }: { run: Run }) {
   return (
-    <details class="add">
-      <summary>Import an .ics file (one-time snapshot)</summary>
-      <input
-        type="file"
-        accept=".ics,text/calendar"
-        aria-label="Calendar file"
-        onChange={async (e) => {
-          const input = e.target as HTMLInputElement;
-          const file = input.files?.[0];
-          if (!file) return;
-          const text = await file.text();
-          await run(
-            'Reading the file',
-            () => send('addIcs', { text, label: file.name }),
-            `${file.name} imported.`,
-          );
-          input.value = '';
-        }}
-      />
-    </details>
+    <div class="guide">
+      <ol>
+        {guide.open && (
+          <li>
+            <a class="button-link" href={guide.open[1]} target="_blank" rel="noreferrer">
+              {guide.open[0]} ↗
+            </a>
+          </li>
+        )}
+        {guide.steps.map((step, i) => (
+          <li key={i}>{step}</li>
+        ))}
+      </ol>
+      <div class="paste">
+        <input
+          aria-label="Calendar link"
+          value={url}
+          placeholder="Paste the link here"
+          onInput={(e) => setUrl((e.target as HTMLInputElement).value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && url.trim()) void add();
+          }}
+        />
+        <button type="button" class="primary" disabled={!url.trim()} onClick={() => void add()}>
+          Add
+        </button>
+      </div>
+      <p class="muted small">
+        This link updates by itself; you only add it once. It stays in this browser.
+      </p>
+      {provider === 'other' && (
+        <label class="file">
+          No link? Import an .ics file instead (a one-time snapshot):
+          <input
+            type="file"
+            accept=".ics,text/calendar"
+            aria-label="Calendar file"
+            onChange={async (e) => {
+              const input = e.target as HTMLInputElement;
+              const file = input.files?.[0];
+              if (!file) return;
+              const text = await file.text();
+              await run(
+                'Reading the file',
+                () => send('addIcs', { text, label: file.name }),
+                `${file.name} imported.`,
+              );
+              input.value = '';
+              onAdded();
+            }}
+          />
+        </label>
+      )}
+    </div>
   );
 }
 
@@ -434,11 +371,14 @@ function AccountRow({ account, run }: { account: Account; run: Run }) {
     account.provider === 'google'
       ? 'Google'
       : account.provider === 'microsoft'
-        ? 'Microsoft'
+        ? 'Outlook'
         : account.icsKind === 'file'
           ? 'File'
           : 'Link';
-  const chosen = account.calendars?.filter((c) => c.enabled).length;
+  const note =
+    account.provider === 'ics' && account.icsKind === 'file'
+      ? 'Snapshot. Import again to update.'
+      : 'Updates automatically.';
 
   async function chooseCalendars() {
     await run('Loading calendars', async () => {
@@ -462,69 +402,59 @@ function AccountRow({ account, run }: { account: Account; run: Run }) {
         <div>
           <span class="badge">{provider}</span> <strong>{account.label}</strong>
           {account.needsReconnect && <span class="badge warn">Needs reconnect</span>}
-          <div class="muted">
-            {account.provider === 'ics'
-              ? account.icsKind === 'file'
-                ? 'Imported file; re-import to update.'
-                : 'Read fresh each time you fill.'
-              : chosen === undefined
-                ? 'Main calendar'
-                : `${chosen} calendar${chosen === 1 ? '' : 's'}`}
-          </div>
+          <div class="muted small">{note}</div>
         </div>
-        <label class="switch">
-          <input
-            type="checkbox"
-            checked={account.enabled}
-            onChange={(e) =>
-              void run('Saving', () =>
-                send('setAccount', {
-                  accountId: account.id,
-                  enabled: (e.target as HTMLInputElement).checked,
-                }),
+        <div class="row">
+          <label class="switch">
+            <input
+              type="checkbox"
+              checked={account.enabled}
+              onChange={(e) =>
+                void run('Saving', () =>
+                  send('setAccount', {
+                    accountId: account.id,
+                    enabled: (e.target as HTMLInputElement).checked,
+                  }),
+                )
+              }
+            />
+            Use
+          </label>
+          {account.provider !== 'ics' && (
+            <button type="button" class="link" onClick={() => void chooseCalendars()}>
+              Calendars
+            </button>
+          )}
+          {account.needsReconnect && account.provider !== 'ics' && (
+            <button
+              type="button"
+              class="link"
+              onClick={() =>
+                void run('Reconnecting', () =>
+                  send('connect', {
+                    provider: account.provider as 'google' | 'microsoft',
+                    accountId: account.id,
+                  }),
+                )
+              }
+            >
+              Reconnect
+            </button>
+          )}
+          <button
+            type="button"
+            class="link danger-link"
+            onClick={() =>
+              void run(
+                'Removing',
+                () => send('disconnect', { accountId: account.id }),
+                'Calendar removed.',
               )
             }
-          />
-          Use
-        </label>
-      </div>
-      <div class="row">
-        {account.provider !== 'ics' && (
-          <>
-            <button type="button" class="link" onClick={() => void chooseCalendars()}>
-              Choose calendars
-            </button>
-            {account.needsReconnect && (
-              <button
-                type="button"
-                class="link"
-                onClick={() =>
-                  void run('Reconnecting', () =>
-                    send('connect', {
-                      provider: account.provider as 'google' | 'microsoft',
-                      accountId: account.id,
-                    }),
-                  )
-                }
-              >
-                Reconnect
-              </button>
-            )}
-          </>
-        )}
-        <button
-          type="button"
-          class="link danger-link"
-          onClick={() =>
-            void run(
-              'Removing',
-              () => send('disconnect', { accountId: account.id }),
-              'Calendar removed.',
-            )
-          }
-        >
-          Remove
-        </button>
+          >
+            Remove
+          </button>
+        </div>
       </div>
       {calendars && (
         <fieldset>
@@ -566,57 +496,162 @@ function AccountRow({ account, run }: { account: Account; run: Run }) {
   );
 }
 
+function PollsSection({
+  settings,
+  update,
+  onError,
+}: {
+  settings: Settings;
+  update: (patch: Partial<Settings>) => Promise<void>;
+  onError: (text: string) => void;
+}) {
+  return (
+    <section>
+      <h3>Weekly polls (days of the week, no dates)</h3>
+      <div class="grid2">
+        <label>
+          Start from
+          <select
+            value={settings.weekdayPollWeek}
+            onChange={(e) =>
+              void update({
+                weekdayPollWeek: (e.target as HTMLSelectElement).value as 'this' | 'next',
+              })
+            }
+          >
+            <option value="next">next week</option>
+            <option value="this">this week</option>
+          </select>
+        </label>
+        <label>
+          …and check this many weeks
+          <input
+            type="number"
+            min={1}
+            max={MAX_WEEKS}
+            value={settings.weekdayPollWeeks}
+            onChange={(e) => {
+              const weeks = Math.round(Number((e.target as HTMLInputElement).value) || 1);
+              void update({ weekdayPollWeeks: Math.min(MAX_WEEKS, Math.max(1, weeks)) });
+            }}
+          />
+        </label>
+      </div>
+      {settings.weekdayPollWeeks > 1 ? (
+        <label>
+          Count a weekday time as free when I'm free
+          <select
+            value={settings.weekdayPollMatch}
+            onChange={(e) =>
+              void update({
+                weekdayPollMatch: (e.target as HTMLSelectElement).value as 'all' | 'most',
+              })
+            }
+          >
+            <option value="all">in every one of those weeks</option>
+            <option value="most">in most of those weeks (ignores one-offs)</option>
+          </select>
+        </label>
+      ) : (
+        <p class="muted small">Tip: for a weekly meeting all term, check 10 or more weeks.</p>
+      )}
+
+      <h3>Other</h3>
+      <div class="grid2">
+        <label>
+          Timezone
+          <input
+            list="timezones"
+            value={settings.timeZone}
+            placeholder={`Automatic (${systemTimeZone()})`}
+            onChange={(e) => {
+              const timeZone = (e.target as HTMLInputElement).value.trim();
+              if (timeZone && !isValidTimeZone(timeZone)) {
+                onError(`"${timeZone}" is not a timezone. Pick one from the list.`);
+                return;
+              }
+              void update({ timeZone });
+            }}
+          />
+          <datalist id="timezones">
+            {Intl.supportedValuesOf('timeZone').map((tz) => (
+              <option key={tz} value={tz} />
+            ))}
+          </datalist>
+        </label>
+        <label>
+          Meeting length for "best times" (min)
+          <input
+            type="number"
+            min={15}
+            step={15}
+            value={settings.meetingMinutes}
+            onChange={(e) =>
+              void update({
+                meetingMinutes: Math.max(15, Number((e.target as HTMLInputElement).value) || 60),
+              })
+            }
+          />
+        </label>
+        <label>
+          "Add to Outlook" opens
+          <select
+            value={settings.outlookAccount}
+            onChange={(e) =>
+              void update({
+                outlookAccount: (e.target as HTMLSelectElement).value as 'work' | 'personal',
+              })
+            }
+          >
+            <option value="work">Outlook for work or school</option>
+            <option value="personal">Outlook.com</option>
+          </select>
+        </label>
+      </div>
+      <Check
+        label="Tell me when my calendar changes after I fill a poll"
+        checked={settings.checkOnOpen}
+        onChange={(checkOnOpen) => void update({ checkOnOpen })}
+      />
+      <Check
+        label="Save straight away, without a preview"
+        checked={settings.skipPreview}
+        onChange={(skipPreview) => void update({ skipPreview })}
+      />
+    </section>
+  );
+}
+
 function RulesSection({ rules, update }: { rules: Rules; update: (rules: Rules) => void }) {
   const set = (patch: Partial<Rules>) => update({ ...rules, ...patch });
   const treat = (key: keyof Rules['treat'], value: string) =>
     set({ treat: { ...rules.treat, [key]: value as 'busy' | 'free' } });
   const hours = rules.workingHours;
+  const minutes = (
+    key: 'bufferBeforeMin' | 'bufferAfterMin' | 'minFreeMinutes',
+    label: string,
+    step: number,
+  ) => (
+    <label>
+      {label}
+      <input
+        type="number"
+        min={0}
+        step={step}
+        value={rules[key]}
+        onChange={(e) =>
+          set({ [key]: Math.max(0, Number((e.target as HTMLInputElement).value) || 0) })
+        }
+      />
+    </label>
+  );
   return (
     <section>
-      <h2>How your calendar becomes availability</h2>
+      <h3>When am I free?</h3>
       <div class="grid2">
-        <label>
-          Buffer before events (min)
-          <input
-            type="number"
-            min={0}
-            step={5}
-            value={rules.bufferBeforeMin}
-            onChange={(e) =>
-              set({
-                bufferBeforeMin: Math.max(0, Number((e.target as HTMLInputElement).value) || 0),
-              })
-            }
-          />
-        </label>
-        <label>
-          Buffer after events (min)
-          <input
-            type="number"
-            min={0}
-            step={5}
-            value={rules.bufferAfterMin}
-            onChange={(e) =>
-              set({
-                bufferAfterMin: Math.max(0, Number((e.target as HTMLInputElement).value) || 0),
-              })
-            }
-          />
-        </label>
-        <label>
-          Ignore free gaps shorter than (min)
-          <input
-            type="number"
-            min={0}
-            step={15}
-            value={rules.minFreeMinutes}
-            onChange={(e) =>
-              set({
-                minFreeMinutes: Math.max(0, Number((e.target as HTMLInputElement).value) || 0),
-              })
-            }
-          />
-        </label>
+        {minutes('bufferBeforeMin', 'Buffer before events (min)', 5)}
+        {minutes('bufferAfterMin', 'Buffer after events (min)', 5)}
+        {minutes('minFreeMinutes', 'Ignore free gaps shorter than (min)', 15)}
         <TreatSelect
           label="Tentative / maybe"
           value={rules.treat.tentative}
@@ -640,14 +675,14 @@ function RulesSection({ rules, update }: { rules: Rules; update: (rules: Rules) 
               set({ allDay: (e.target as HTMLSelectElement).value as Rules['allDay'] })
             }
           >
-            <option value="auto">Follow each event's free/busy setting</option>
+            <option value="auto">Follow each event's setting</option>
             <option value="busy">Always busy</option>
             <option value="free">Always free</option>
           </select>
         </label>
       </div>
       <Check
-        label="Only mark me available during working hours"
+        label="Only mark me free during working hours"
         checked={hours !== null}
         onChange={(on) =>
           set({ workingHours: on ? { days: [1, 2, 3, 4, 5], start: '09:00', end: '17:00' } : null })
