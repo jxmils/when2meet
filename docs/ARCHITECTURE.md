@@ -71,8 +71,9 @@ Blocks are classified (`busy`, `tentative`, `oof`, `workingElsewhere`, `free`, `
 
 Each fill stores, per poll and person: `applied` (verified server state after saving), `calendar` (the calendar target used), `overrides` (manual edits) and `previous` (for undo).
 
-- **First fill:** if nothing is marked yet, follow the calendar (`replace`). Otherwise default to `add`: keep existing marks (recorded as overrides) and highlight conflicts, with a one-click "remove them too".
-- **Revisit:** any slot whose server value differs from `applied` was edited by hand (or elsewhere) and becomes an override. The target is the fresh calendar target with overrides applied; unknown slots keep their server value. Changes are labelled as calendar, settings or new-slot changes.
+- **First fill:** `replace` follows the calendar; `add` keeps slots already marked (recorded as overrides).
+- **Revisit:** any slot whose server value differs from `applied` was edited by hand (or elsewhere) and becomes an override. The target is the fresh calendar target with overrides applied; unknown slots keep their server value. `resetOverrides` drops them and follows the calendar. Changes are labelled as calendar, settings or new-slot changes.
+- **The panel plans both outcomes.** Where When2meet and the calendar disagree (the `conflicts` of the keep plan), it lists the times and offers **Keep my When2meet edits** or **Follow imported calendar**; switching is instant. First fills default to following the calendar, revisits to keeping edits.
 
 Property tests check that planning is idempotent and that calendar changes never override a manual edit.
 

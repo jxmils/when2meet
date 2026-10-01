@@ -46,4 +46,13 @@ test('panel screenshots', async ({ context, extensionId, mock }) => {
   await expect(page.getByText(/checked against When2meet/)).toBeVisible();
   await page.getByRole('button', { name: 'See best times' }).click();
   await page.screenshot({ path: `${OUT}/saved.png` });
+
+  // Marked available by hand during meetings: the panel asks which side wins.
+  const personId = mock.personByName(SEED_POLLS.dates.id, 'Jordan Lee')?.id ?? 0;
+  const mine = mock.polls.get(SEED_POLLS.dates.id)?.availability.get(personId);
+  for (const slot of [monday, monday + 900, monday + 5 * 3600]) mine?.add(slot);
+  await page.getByRole('button', { name: 'Hide best times' }).click();
+  await page.getByRole('button', { name: 'Check again' }).click();
+  await expect(page.getByRole('button', { name: 'Keep my When2meet edits' })).toBeVisible();
+  await page.screenshot({ path: `${OUT}/differences.png` });
 });

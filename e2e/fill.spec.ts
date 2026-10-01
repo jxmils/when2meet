@@ -186,8 +186,12 @@ test('on a later visit, applies calendar changes but keeps manual edits; undo re
   await page.goto(pollUrl(dates));
   await page.getByRole('button', { name: 'Fill from my calendar' }).click();
   await expect(
-    page.getByText(/1 slot you changed by hand differs from your calendar/),
+    page.getByText(/1 slot you changed on When2meet doesn't match your imported calendar/),
   ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Keep my When2meet edits' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   await expect(page.locator('.stat.remove strong')).toHaveText('−4');
   await page.getByRole('button', { name: 'Save to When2meet' }).click();
   await expect(page.getByText(/checked against When2meet/)).toBeVisible();
@@ -283,18 +287,19 @@ test('replaces hand-marked slots that clash with the calendar, with an option to
   // By default the calendar wins: the clashing slots are removed.
   await expect(page.locator('.stat.remove strong')).toHaveText(`−${busy}`);
   await expect(
-    page.getByText(
-      `${busy} slots you'd marked yourself are busy in your calendar, so they're removed.`,
-    ),
+    page.getByText(`${busy} slots you'd marked on When2meet don't match your imported calendar:`),
   ).toBeVisible();
+  const follow = page.getByRole('button', { name: 'Follow imported calendar' });
+  await expect(follow).toHaveAttribute('aria-pressed', 'true');
 
-  // "Keep them": nothing new to save, and the kept clashes are outlined.
-  await page.getByRole('button', { name: 'Keep them' }).click();
+  // Keeping the When2meet edits: nothing new to save, and the kept clashes are outlined.
+  await page.getByRole('button', { name: 'Keep my When2meet edits' }).click();
   await expect(page.getByText('Nothing new from your calendar.')).toBeVisible();
   await expect(page.locator('[data-w2msync="conflict"]')).toHaveCount(busy);
   await expect(page.getByRole('button', { name: 'Save to When2meet' })).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Use my calendar for these' }).click();
+  await follow.click();
+  await expect(page.locator('[data-w2msync="conflict"]')).toHaveCount(0);
   await page.getByRole('button', { name: 'Save to When2meet' }).click();
   await expect(page.getByText(/checked against When2meet/)).toBeVisible();
   expect(mock.bitsFor(dates.id, 777)).toBe(expected);
@@ -455,11 +460,15 @@ test('catches a slot marked available by hand during a meeting when checking aga
   await page.getByRole('button', { name: 'Check again' }).click();
   await expect(page.getByText('Nothing new from your calendar.')).toBeVisible();
   await expect(
-    page.getByText(/1 slot you changed by hand differs from your calendar/),
+    page.getByText(/1 slot you changed on When2meet doesn't match your imported calendar/),
   ).toBeVisible();
+  // The differing time is spelled out, with which side says what.
+  await expect(
+    page.getByRole('listitem').filter({ hasText: 'free on When2meet, busy in calendar' }),
+  ).toHaveCount(1);
   await expect(page.locator('[data-w2msync="conflict"]')).toHaveCount(1);
 
-  await page.getByRole('button', { name: 'Use my calendar for it' }).click();
+  await page.getByRole('button', { name: 'Follow imported calendar' }).click();
   await expect(page.locator('.stat.remove strong')).toHaveText('−1');
   await page.getByRole('button', { name: 'Save to When2meet' }).click();
   await expect(page.getByText(/checked against When2meet/)).toBeVisible();

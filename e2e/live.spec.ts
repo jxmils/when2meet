@@ -132,18 +132,17 @@ for (const url of POLLS) {
     const confirm = page.getByRole('button', { name: "Yes, that's me" });
     const save = page.getByRole('button', { name: 'Save to When2meet' });
     const upToDate = page.getByText('already matches your calendar');
-    // Should anything be kept that differs from the calendar, follow the calendar instead.
-    const removeConflicts = page.getByRole('button', { name: /^Use my calendar for/ });
-    const settled = save.or(upToDate).or(removeConflicts);
-    await expect(confirm.or(settled)).toBeVisible({ timeout: 30_000 });
+    // Where When2meet differs from the calendar, follow the calendar.
+    const follow = page.getByRole('button', { name: 'Follow imported calendar' });
+    const settled = save.or(upToDate).or(follow).first();
+    await expect(confirm.or(settled).first()).toBeVisible({ timeout: 30_000 });
     if (await confirm.isVisible()) {
       await confirm.dispatchEvent('click');
       await expect(settled).toBeVisible({ timeout: 30_000 });
     }
-    if (await removeConflicts.isVisible()) {
-      await removeConflicts.dispatchEvent('click');
-      await expect(removeConflicts).toBeHidden({ timeout: 30_000 });
-      await expect(save.or(upToDate)).toBeVisible({ timeout: 30_000 });
+    if (await follow.isVisible()) {
+      await follow.dispatchEvent('click');
+      await expect(follow).toHaveAttribute('aria-pressed', 'true');
     }
     if (await save.isVisible()) {
       await save.dispatchEvent('click');

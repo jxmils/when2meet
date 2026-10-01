@@ -247,6 +247,47 @@ a {
   font-size: 13px;
 }
 
+.choice {
+  display: grid;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--warn-line);
+  border-radius: 8px;
+  background: var(--warn-bg);
+  font-size: 13px;
+}
+
+ul.ranges {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.segmented button {
+  padding: 6px 8px;
+  border: 0;
+  background: none;
+  color: var(--fg);
+}
+
+.segmented button + button {
+  border-left: 1px solid var(--line);
+}
+
+.segmented button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 600;
+}
+
 .error {
   color: var(--danger);
 }

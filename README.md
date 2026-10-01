@@ -12,7 +12,7 @@ Fill your [When2meet](https://www.when2meet.com) availability from **Google Cale
 
 - **One click per poll.** Open any When2meet link and click **Fill from my calendar**. The extension signs in with your name, works out when you're free, and highlights the changes on your grid. Save, and the result is checked against When2meet's server. Undo is one click.
 - **Every calendar you use, together.** Connect several Google and Microsoft accounts and calendar links; their busy times are merged.
-- **Updates when your calendar changes.** Reopen a poll you filled and you'll be told if your calendar changed, with a one-click update. Slots you changed by hand are kept.
+- **Updates when your calendar changes.** Reopen a poll you filled and you'll be told if your calendar changed, with a one-click update. Where your When2meet edits and your calendar disagree, it lists the times and you choose: **Keep my When2meet edits** or **Follow imported calendar**.
 - **Your rules.** Buffers around meetings, working hours, minimum free stretch, and how to treat tentative, out-of-office, working-elsewhere and all-day events.
 - **Term-long polls.** Polls that span many weeks, such as a whole term, work the same way. Weekly classes keep their local time across clock changes, and the preview shows the dates covered.
 - **Days-of-the-week polls.** Pick which real week to read (next week by default), or check several weeks, such as a whole term. You're then marked free only at times you're free every week, or in most weeks.
