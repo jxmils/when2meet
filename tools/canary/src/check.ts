@@ -62,8 +62,9 @@ async function check(url: string): Promise<Result> {
   try {
     const poll = parseEventHtml(html, ref);
     const slotSec = slotLengthSec(poll.slots);
+    const people = `${poll.people.length} ${poll.people.length === 1 ? 'person' : 'people'}`;
     notes.push(
-      `${poll.slots.length} slots of ${slotSec / 60} min, ${poll.people.length} people, ${poll.cells.length} grid cells`,
+      `${poll.slots.length} slots of ${slotSec / 60} min, ${people}, ${poll.cells.length} grid cells`,
     );
     if (slotSec !== 900) notes.push(`Unexpected slot length ${slotSec}s.`);
     if (poll.cells.length < poll.slots.length * 0.9) {
@@ -91,21 +92,27 @@ if (urls.length === 0) {
   process.exit(0);
 }
 
-const expected = JSON.parse(await readFile(EXPECTED_FILE, 'utf8')) as { scriptHash: string | null };
+const expected = JSON.parse(await readFile(EXPECTED_FILE, 'utf8')) as {
+  scriptHashes?: Record<string, string>;
+};
 const results = await Promise.all(urls.map(check));
-const hashes = [...new Set(results.map((r) => r.scriptHash).filter(Boolean))] as string[];
 let failed = results.some((r) => !r.ok);
 
 if (process.argv.includes('--update')) {
-  await writeFile(EXPECTED_FILE, `${JSON.stringify({ scriptHash: hashes[0] ?? null }, null, 2)}\n`);
-  console.log(`Baseline updated to ${hashes[0]}.`);
-} else if (expected.scriptHash && hashes.some((h) => h !== expected.scriptHash)) {
-  failed = true;
-  results.forEach((r) => {
-    r.notes.push(
-      `Page script changed (fingerprint ${r.scriptHash}, expected ${expected.scriptHash}).`,
-    );
-  });
+  const scriptHashes = Object.fromEntries(
+    results.filter((r) => r.scriptHash).map((r) => [r.url, r.scriptHash as string]),
+  );
+  await writeFile(EXPECTED_FILE, `${JSON.stringify({ scriptHashes }, null, 2)}\n`);
+  console.log(`Baseline updated for ${Object.keys(scriptHashes).length} poll(s).`);
+} else {
+  for (const r of results) {
+    const want = expected.scriptHashes?.[r.url];
+    if (want && r.scriptHash !== want) {
+      failed = true;
+      r.ok = false;
+      r.notes.push(`Page script changed (fingerprint ${r.scriptHash}, expected ${want}).`);
+    }
+  }
 }
 
 const lines = [

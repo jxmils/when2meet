@@ -1,12 +1,12 @@
 # When2meet internals
 
-When2meet has no API. This page records exactly what the extension relies on, how it was learned, and what is still unverified. Only GET requests were used to learn it; the live save behaviour is to be confirmed with maintainer-owned test polls (see the checklist below).
+When2meet has no API. This page records what the extension relies on and how it was confirmed. Everything below was verified on 1 October 2026 against two maintainer-owned throwaway polls (see [Live verification](#live-verification)).
 
 **Do not copy When2meet's HTML or JavaScript into this repository.** Tests use synthetic pages written from scratch (`packages/when2meet/src/testing/synthetic-page.ts`) that reproduce only the interface below.
 
 ## Poll page (`GET https://www.when2meet.com/?<id>-<code>`)
 
-Global variables declared with `var` in an inline script (visible only in the page's own JS world, which is why the extension injects a page script):
+An inline script declares these globals with `var`. They're visible only in the page's own JS world, which is why the extension injects a page script.
 
 | Variable | Meaning |
 |---|---|
@@ -14,60 +14,117 @@ Global variables declared with `var` in an inline script (visible only in the pa
 | `AvailableAtSlot[i]` | array of person ids available in slot *i* (`AvailableAtSlot[i].push(id)` lines) |
 | `PeopleNames[i]`, `PeopleIDs[i]` | participants; names are HTML-escaped inside single-quoted JS strings, e.g. `'A \&quot;B\&quot; C'` |
 | `UserID` | signed-in person id, `0` when signed out |
-| `IsMouseDown`, `ChangeToAvailable`, `FromCol`, `ToCol`, `FromRow`, `ToRow` | drag state used by `SelectStop()` |
+| `IsMouseDown`, `ChangeToAvailable`, `FromCol`, `ToCol`, `FromRow`, `ToRow` | drag state used by `SelectStop()`; the column and row values are `-1` when idle |
 
-- There is no slot-length variable: it's the smallest gap (900 s). Days can have different slot counts across DST changes.
-- The event id and code are not globals; take them from `location.search`.
-- The personal grid is `#YouGrid` → `#YouGridSlots`, hidden until sign-in. Cells: `<div id="YouTime<ts>" data-col data-row data-time onmousedown="SelectFromHere(event)" onmouseover="SelectToHere(event)">`. Group cells are `GroupTime<ts>`.
-- Cells appear row by row in the HTML; don't use their order as slot order.
+Functions: `ProcessLogin`, `SelectFromHere`, `SelectToHere`, `SelectStop` (also `document.onmouseup`), `ReColorIndividual`, `ReColorGroup`, `LoadAvailabilityGrids`, plus touch variants.
+
+**Slots and ids**
+- There is no slot-length variable. It's the smallest gap between slots, 900 s.
+- The event id and code are not globals. Take them from `location.search`.
+
+**Grid**
+- The personal grid is `#YouGrid` → `#YouGridSlots`, hidden until sign-in. Each cell looks like `<div id="YouTime<ts>" data-col data-row data-time onmousedown="SelectFromHere(event);" onmouseover="SelectToHere(event);">`.
+- Group cells are `GroupTime<ts>`.
+
+**Caching:** poll GETs are not cached. They return `Cache-Control: no-store, no-cache, must-revalidate` and CloudFront `X-Cache: Miss`.
 
 ### Timezones
 
-- **Specific dates:** slot values are real instants. The page renders in the creator's zone, then (if the viewer's zone differs) reloads the grid HTML from `AvailabilityGrids.php`. `TimeOfSlot` does not change; only `data-col`/`data-row` and labels do, and some views contain blank cells without ids (e.g. Asia/Tokyo). The extension therefore uses `TimeOfSlot` for times and the live DOM for cell positions.
-- **Days of the week:** the timezone list only offers UTC; slots are clock times in a reference week, Sunday 1978-11-12 00:00 UTC = `279676800`. Monday 09:00 is `279795600`.
+- **Specific dates:** slot values are real instants. The page renders in the creator's zone. When the viewer's zone differs, it reloads the grid HTML from `AvailabilityGrids.php`.
+  - `TimeOfSlot` does not change; only `data-col`/`data-row` and the labels do.
+  - Some views have blank cells without ids (e.g. Asia/Tokyo).
+  - The extension uses `TimeOfSlot` for times and the live DOM only for cell positions.
+- **Days of the week:** the timezone list offers only UTC. Slots are clock times in a reference week:
+  - Sunday 1978-11-12 00:00 UTC = `279676800`.
+  - Monday 09:00 = `279795600`.
+  - A Mon–Fri 9–5 poll has 160 slots.
 
 ## Sign-in (`POST /ProcessLogin.php`)
 
-Form fields `id`, `name`, `password`. The response body is the person id, or an error message (e.g. "Wrong password."), which the page shows with `alert()`. A new name creates a participant. The extension drives the page's own form and captures `alert()` messages instead of showing them.
+**Request:** form fields `id`, `name`, `password`.
+
+**Response:** the person id as text, or an error message that the page shows with `alert()`. Signing in again with the same name returns the same id.
+
+**After sign-in:**
+- The page sets `UserID`, shows `#YouGrid`, and adds the person to `PeopleIDs`/`PeopleNames` if new.
+- It sets no cookie.
+
+The extension drives the page's own form and captures `alert()` messages instead of showing them.
 
 ## Saving (`POST /SaveTimes.php`)
 
-Sent by `SelectStop()` (bound to `document.onmouseup`) once per drag. Fields, in this order:
+`SelectStop()` sends this request once per drag, with fields in this order:
 
 | Field | Value |
 |---|---|
 | `person` | person id |
 | `event` | numeric event id |
-| `slots` | comma-joined slot timestamps of the dragged rectangle only |
-| `availability` | `0`/`1` for **every** slot, reflecting the state after the drag |
+| `slots` | comma-joined slot timestamps of the dragged rectangle |
+| `availability` | `0`/`1` per slot after the drag (see below) |
 | `password` | the participant's password field |
 | `ChangeToAvailable` | `true` / `false` |
 
-### Unverified
+**Verified behaviour:**
 
-- Third-party reports disagree on whether a hand-built `SaveTimes.php` request persists (one saw 200 responses that were not stored; another reports success). A session cookie set by `ProcessLogin.php` may matter.
-- Which field the server honours (`availability` vs `slots` + `ChangeToAvailable`), and whether it checks `password` on save.
-- CloudFront caching of GET responses.
+- **The server applies the full `availability` string.**
+  - It ignores `slots` and `ChangeToAvailable`. A request listing a slot in `slots` without changing the string leaves it unchanged.
+  - A request with empty `slots` but a changed string applies the change.
+  - The response is `200` with an empty body.
+- **No session is needed.**
+  - A request from the page persists, and so does a plain server-side request with no cookies.
+  - Only `person`, `event`, `availability` and, for protected participants, `password` matter.
+  - This is When2meet's design: a participant without a password can be edited by anyone who knows their id.
+- **`SelectStop()` builds `availability` only from slots that have a grid cell.**
+  - In views with blank cells, When2meet's own string is shorter than the slot list and the server would misalign it.
+  - The extension never replays drags on an incomplete grid.
+  - Its direct requests always send the full-length string in `TimeOfSlot` order.
 
-The extension is built to be correct under every combination: its direct strategy is valid for either field, every save is verified with an uncached GET, and it falls back to replaying drags through the page's own handler.
+**How the extension saves:**
 
-## Spike checklist
+1. **Direct, then verify.** At most two direct requests, additions then removals, each with the correct full string. Then an uncached reload to verify; on the live site one request would suffice.
+2. **Fallback.** If verification fails on a complete grid, replay vertical drags through `SelectStop()`.
+3. **Resync afterwards.** The page's in-memory state is resynced so a later manual drag can't send a stale string.
 
-Run once with two throwaway polls the maintainers create (one specific-dates, one days-of-week), named e.g. "calendar-sync test — please ignore". Record results here.
+## Live verification
 
-1. **Capture.** In a normal browser, sign in and drag once. In DevTools → Network, "Copy as fetch" both POSTs. Note headers, cookies (is `PHPSESSID` set?), field order, CORS/CSP headers, and `X-Cache`/`Age` on the GET.
-2. **Replay from the page console.** Send the captured request; the two-request scheme from `buildDirectRequests`; `slots` only; `availability` only; contradictory values; a wrong-length string; a wrong password. Check each result from a cookieless client (`curl`) twice, 10 s apart.
-3. **Replay from Node** (decides the no-install web app's server relay): repeat with and without the session cookie, `Referer`, `Origin`, and `www` vs apex host.
-4. **Timezone view.** Switch the viewer timezone to Asia/Tokyo and fill; confirm cells and unreachable-slot reporting.
-5. Record the outcome below, set the default strategy in `executeSave` accordingly, and add the polls to the `CANARY_POLLS` repository variable.
+Polls (throwaway, public, safe to reuse for testing):
 
-### Results
+- Specific dates, Oct 5–7 2026, 9–5 America/New_York: https://www.when2meet.com/?38989176-ac4P8
+- Days of the week, Mon–Fri 9–5: https://www.when2meet.com/?38989243-bYl5e
 
-_Not run yet._
+Results, 1 October 2026:
+
+| Check | Result |
+|---|---|
+| Globals, functions, cell markup | as documented above |
+| Direct request from the page | kept |
+| `slots`/`ChangeToAvailable` vs `availability` | only `availability` is applied |
+| Direct request from a server, no cookies | kept |
+| `ProcessLogin.php` cookie | none set |
+| Drag replay through `SelectStop()` | kept; only the dragged cells changed; drag state reset to `-1` |
+| GET caching | `no-store`, CloudFront miss |
+| Viewer timezone ≠ creator timezone (London viewing a New York poll) | grid re-rendered; fill correct |
+| Full extension run (`e2e/live.spec.ts`) on both polls | server state equals the calendar-derived target |
+
+To re-run the extension against them:
+
+```bash
+npm run build
+LIVE_POLLS="https://www.when2meet.com/?38989176-ac4P8,https://www.when2meet.com/?38989243-bYl5e" npx playwright test e2e/live.spec.ts
+```
 
 ## Canary
 
-`tools/canary` (weekly in CI, GET only) checks that the configured polls still parse, have 900 s slots and personal-grid cells, and still reference `SelectStop`, `SaveTimes.php`, `ProcessLogin.php` and the globals above. It also fingerprints the page script with per-poll data removed; a change opens an issue. After reviewing a change, accept it with `npm run canary -- --update`.
+`tools/canary` runs weekly in CI. It sends GET requests only, to the polls above or the `CANARY_POLLS` repository variable, and checks that each poll:
+
+- still parses, with 900 s slots and personal-grid cells;
+- still references `SelectStop`, `SaveTimes.php`, `ProcessLogin.php` and the globals above.
+
+It also fingerprints each poll's page script with per-poll data removed, and opens an issue when anything changes. After reviewing a change, accept it with:
+
+```bash
+CANARY_POLLS=… npm run canary -- --update
+```
 
 ## Sources
 
