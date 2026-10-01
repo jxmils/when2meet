@@ -180,10 +180,18 @@ describe('executeSave', () => {
     expect(env.log).toEqual([]);
   });
 
-  it('reports slots it cannot reach on the page', async () => {
+  it('never replays drags on an incomplete grid (the page would send a short string)', async () => {
     const env = fakeEnvironment('00000000', 'availability', true, cells.slice(1));
     const outcome = await executeSave(env.driver, { ...base, target: '11000000' });
-    expect(outcome).toMatchObject({ status: 'saved', via: 'drive', unreachable: [100] });
-    expect(env.server()).toBe('01000000');
+    expect(outcome).toMatchObject({ status: 'failed', verified: '00000000' });
+    expect(env.log.filter((l) => l.kind === 'drive')).toEqual([]);
+    expect(env.server()).toBe('00000000');
+  });
+
+  it('saves directly even when the grid is incomplete', async () => {
+    const env = fakeEnvironment('00000000', 'availability', false, cells.slice(1));
+    const outcome = await executeSave(env.driver, { ...base, target: '11000000' });
+    expect(outcome).toMatchObject({ status: 'saved', via: 'direct' });
+    expect(env.server()).toBe('11000000');
   });
 });

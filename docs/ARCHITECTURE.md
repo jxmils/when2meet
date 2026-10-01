@@ -75,10 +75,12 @@ Property tests check that planning is idempotent and that calendar changes never
 
 ### Saving (`packages/when2meet/src/save.ts`)
 
+Verified live: When2meet applies the full `availability` string of a `SaveTimes.php` request (see [WHEN2MEET_INTERNALS.md](WHEN2MEET_INTERNALS.md#saving-post-savetimesphp)).
+
 1. Read the baseline with a fresh GET. If it differs from what the preview was computed from, stop (`stale`) and re-plan.
 2. **Direct:** at most two `SaveTimes.php` requests, additions first (with the intermediate full availability string) then removals (with the final string). This is correct whether When2meet applies the `availability` string or the `slots` + `ChangeToAvailable` pair.
 3. **Verify** with another fresh GET.
-4. **Fallback:** if the server didn't keep the change, resync the page's in-memory state to the server, then replay vertical drag runs per grid column through the page's own `SelectStop()`, waiting for each request to finish. Slots without a grid cell are reported as unreachable.
+4. **Fallback:** if the server didn't keep the change, resync the page's in-memory state to the server, then replay vertical drag runs per grid column through the page's own `SelectStop()`, waiting for each request to finish. This is skipped when the grid is missing cells, because the page would then send a shortened availability string.
 5. Resync the page's state and colours so a later manual drag can't send a stale string.
 
 ## Sign-in

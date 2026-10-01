@@ -83,9 +83,9 @@ One-click sign-in needs your own OAuth apps: copy `apps/extension/.env.example` 
 ## Roadmap
 
 - [x] Core engine, When2meet adapter, ICS/Google/Microsoft providers, extension, OAuth broker, e2e tests
-- [ ] Live verification against When2meet with maintainer test polls ([WHEN2MEET_INTERNALS.md](docs/WHEN2MEET_INTERNALS.md#spike-checklist))
+- [x] Live verification against real When2meet polls ([results](docs/WHEN2MEET_INTERNALS.md#live-verification))
 - [ ] Store listings (Chrome Web Store, Firefox Add-ons, Edge Add-ons); Google OAuth verification
-- [ ] No-install web app at `https://<site>/?<poll>` for phones and Safari
+- [ ] No-install web app at `https://<site>/?<poll>` for phones and Safari (server-side saving is confirmed to work)
 - [ ] Safari extension
 
 ## Contributing

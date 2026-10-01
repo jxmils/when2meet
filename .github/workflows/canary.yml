@@ -22,7 +22,8 @@ jobs:
       - run: npm ci
       - name: Read-only check of the maintainers' test polls
         env:
-          CANARY_POLLS: ${{ vars.CANARY_POLLS }}
+          # Maintainer-owned throwaway polls (see docs/WHEN2MEET_INTERNALS.md); override with the CANARY_POLLS variable.
+          CANARY_POLLS: ${{ vars.CANARY_POLLS || 'https://www.when2meet.com/?38989176-ac4P8,https://www.when2meet.com/?38989243-bYl5e' }}
         run: npm run canary
       - name: Open an issue
         if: failure()

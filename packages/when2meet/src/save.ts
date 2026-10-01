@@ -219,10 +219,26 @@ export async function executeSave(driver: SaveDriver, options: SaveOptions): Pro
     }
   }
 
+  // When2meet's own SelectStop() builds the availability string from the grid cells on the page.
+  // With cells missing (some timezone views), that string is shorter than the slot list and the
+  // server would misread it, so never replay drags on an incomplete grid.
+  const cells = driver.cells();
+  if (cells.length < slots.length) {
+    const verified = await driver.serverBits();
+    await driver.resync(verified);
+    return {
+      status: 'failed',
+      baseline,
+      verified,
+      error:
+        "When2meet didn't keep the change, and this timezone view hides part of the grid. Switch the poll's timezone at the top of the page and try again.",
+    };
+  }
+
   // Replay drags from the server's current state, so the page sends correct full strings.
   const current = await driver.serverBits();
   await driver.resync(current);
-  const { runs, unreachable } = planDriveRuns(slots, driver.cells(), current, target);
+  const { runs, unreachable } = planDriveRuns(slots, cells, current, target);
   for (const run of runs) await driver.driveRun(run);
   const verified = await driver.serverBits();
   const skip = new Set(unreachable);
