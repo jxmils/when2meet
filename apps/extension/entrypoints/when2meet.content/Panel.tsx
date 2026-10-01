@@ -71,6 +71,7 @@ interface FillOptions {
   mode?: FillMode;
   resetOverrides?: boolean;
   ignoreProblems?: boolean;
+  /** Re-read calendars instead of reusing what was read moments ago (default: yes). */
   fresh?: boolean;
   week?: string;
 }
@@ -85,6 +86,7 @@ export function Panel({ page, pollRef, initial }: Props) {
   const [password, setPassword] = useState('');
   const [week, setWeek] = useState<string | null>(null);
   const [showBest, setShowBest] = useState(false);
+  const [checkedAt, setCheckedAt] = useState<number | null>(null);
   const confirmedName = useRef<string | null>(null);
   const key = eventKey(pollRef);
   const weekdays = detectPollKind(poll.slots) === 'weekdays';
@@ -227,9 +229,10 @@ export function Panel({ page, pollRef, initial }: Props) {
         slots: poll.slots,
         interactive: true,
         ...(chosenWeek ? { weekStart: chosenWeek } : {}),
-        ...(options.fresh ? { fresh: true } : {}),
+        ...(options.fresh === false ? {} : { fresh: true }),
       });
       if (compute.weekStart) setWeek(compute.weekStart);
+      setCheckedAt(compute.readAt);
       if (compute.sourcesRead === 0 && compute.problems.length === 0) {
         setView({
           name: 'error',
@@ -242,7 +245,7 @@ export function Panel({ page, pollRef, initial }: Props) {
         setView({
           name: 'problems',
           problems: compute.problems,
-          proceed: () => void fill({ ...options, ignoreProblems: true }),
+          proceed: () => void fill({ ...options, ignoreProblems: true, fresh: false }),
         });
         return;
       }
@@ -309,7 +312,7 @@ export function Panel({ page, pollRef, initial }: Props) {
       });
       clearPreview();
       if (outcome.status === 'stale') {
-        await fill({ ...(compute.weekStart ? { week: compute.weekStart } : {}) });
+        await fill({ ...(compute.weekStart ? { week: compute.weekStart } : {}), fresh: false });
         return;
       }
       if (outcome.status === 'failed') {
@@ -541,8 +544,10 @@ export function Panel({ page, pollRef, initial }: Props) {
         return (
           <>
             <p class="ok">✓ Your availability already matches your calendar.</p>
+            {weekdays && renderWeekPicker()}
+            <p class="muted">{checkedLabel()}</p>
             <div class="row">
-              <button type="button" class="secondary" onClick={() => void fill({ fresh: true })}>
+              <button type="button" class="secondary" onClick={() => void fill()}>
                 Check again
               </button>
             </div>
@@ -625,6 +630,14 @@ export function Panel({ page, pollRef, initial }: Props) {
     );
   }
 
+  function checkedLabel(): string {
+    if (checkedAt === null) return '';
+    const minutes = Math.floor((Date.now() - checkedAt) / 60_000);
+    return minutes < 1
+      ? 'Checked your calendar just now.'
+      : `Checked your calendar ${plural(minutes, 'minute')} ago.`;
+  }
+
   /** The week a days-of-the-week poll is read from: chosen, or the default from settings. */
   function currentWeek(): string {
     return (
@@ -659,7 +672,9 @@ export function Panel({ page, pollRef, initial }: Props) {
     const shift = (days: number) => {
       const next = addDays(shown, days);
       setWeek(next);
-      if (view.name === 'preview') void fill({ week: next });
+      if (view.name === 'preview' || view.name === 'up-to-date' || view.name === 'done') {
+        void fill({ week: next, fresh: false });
+      }
     };
     return (
       <div class="week">
@@ -716,7 +731,11 @@ export function Panel({ page, pollRef, initial }: Props) {
           <div class="note">
             {plural(plan.conflicts.length, 'slot')} you already marked{' '}
             {plan.conflicts.length === 1 ? 'is' : 'are'} busy in your calendar. They're kept.{' '}
-            <button type="button" class="link" onClick={() => void fill({ mode: 'replace' })}>
+            <button
+              type="button"
+              class="link"
+              onClick={() => void fill({ mode: 'replace', fresh: false })}
+            >
               Remove them too
             </button>
           </div>
@@ -733,7 +752,11 @@ export function Panel({ page, pollRef, initial }: Props) {
           </button>
         </div>
         {plan.kind === 'revisit' && Object.keys(plan.overrides).length > 0 && (
-          <button type="button" class="link" onClick={() => void fill({ resetOverrides: true })}>
+          <button
+            type="button"
+            class="link"
+            onClick={() => void fill({ resetOverrides: true, fresh: false })}
+          >
             Ignore my manual edits and follow the calendar exactly
           </button>
         )}
@@ -772,6 +795,9 @@ export function Panel({ page, pollRef, initial }: Props) {
             onClick={() => void undo(props.record, props.personId)}
           >
             Undo
+          </button>
+          <button type="button" class="secondary" onClick={() => void fill()}>
+            Check again
           </button>
           <button type="button" class="secondary" onClick={() => setShowBest(true)}>
             See best times

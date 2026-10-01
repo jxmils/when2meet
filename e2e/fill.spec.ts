@@ -1,3 +1,5 @@
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import {
   dayOfWeek,
   defaultWeekStart,
@@ -354,4 +356,69 @@ test('checks a days-of-the-week poll against a whole term of weeks', async ({
   await page.getByRole('button', { name: 'Save to When2meet' }).click();
   await expect(page.getByText(/checked against When2meet/)).toBeVisible();
   expect(mock.bitsFor(weekdays.id, personId)).toBe(busyAt([mondayClass]));
+});
+
+test('re-reads a calendar link on every click, so calendar edits show up straight away', async ({
+  context,
+  extensionId,
+  mock,
+}) => {
+  const slots = mock.polls.get(dates.id)?.slots ?? [];
+  const monday = slots[0] as number; // Monday 09:00 New York
+  const meeting = (fromHour: number) => ({
+    start: (monday + fromHour * 3600) * 1000,
+    end: (monday + (fromHour + 1) * 3600) * 1000,
+  });
+  let ics = makeIcs([meeting(0)]);
+  const server = createServer((_, res) => {
+    res.writeHead(200, { 'content-type': 'text/calendar' });
+    res.end(ics);
+  });
+  await new Promise<void>((resolve) => server.listen(0, 'localhost', resolve));
+  const { port } = server.address() as AddressInfo;
+  const busy = (...ranges: [number, number][]) =>
+    slots.map((_, i) => (ranges.some(([a, b]) => i >= a && i < b) ? '0' : '1')).join('');
+  try {
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extensionId}/options.html`);
+    const name = page.getByLabel('Name', { exact: true });
+    await name.fill('Jordan Lee');
+    await name.press('Tab');
+    await openMoreSettings(page);
+    await page.getByLabel('Timezone').fill(TZ);
+    await page.getByLabel('Timezone').press('Tab');
+    await page.getByRole('button', { name: /Apple & others/ }).click();
+    await page.getByLabel('Calendar link').fill(`http://localhost:${port}/calendar.ics`);
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(page.getByText('Calendar added.')).toBeVisible();
+
+    await page.goto(pollUrl(dates));
+    await page.getByRole('button', { name: 'Fill from my calendar' }).click();
+    await page.getByRole('button', { name: 'Save to When2meet' }).click();
+    await expect(page.getByText(/checked against When2meet/)).toBeVisible();
+    const personId = mock.personByName(dates.id, 'Jordan Lee')?.id ?? 0;
+    expect(mock.bitsFor(dates.id, personId)).toBe(busy([0, 4]));
+
+    // A meeting is added at 13:00; checking again seconds later picks it up.
+    ics = makeIcs([meeting(0), meeting(4)]);
+    await page.getByRole('button', { name: 'Check again' }).click();
+    await expect(page.locator('.stat.remove strong')).toHaveText('−4');
+    await page.getByRole('button', { name: 'Save to When2meet' }).click();
+    await expect(page.getByText(/checked against When2meet/)).toBeVisible();
+    expect(mock.bitsFor(dates.id, personId)).toBe(busy([0, 4], [16, 20]));
+
+    // It's cancelled again; the slots come back.
+    ics = makeIcs([meeting(0)]);
+    await page.getByRole('button', { name: 'Check again' }).click();
+    await expect(page.locator('.stat.add strong')).toHaveText('+4');
+    await page.getByRole('button', { name: 'Save to When2meet' }).click();
+    await expect(page.getByText(/checked against When2meet/)).toBeVisible();
+    expect(mock.bitsFor(dates.id, personId)).toBe(busy([0, 4]));
+
+    await page.getByRole('button', { name: 'Check again' }).click();
+    await expect(page.getByText('already matches your calendar')).toBeVisible();
+    await expect(page.getByText('Checked your calendar just now.')).toBeVisible();
+  } finally {
+    server.close();
+  }
 });

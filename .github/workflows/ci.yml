@@ -32,6 +32,8 @@ jobs:
         run: npx web-ext lint --source-dir apps/extension/.output/firefox-mv3
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
+      - name: Build the end-to-end variant (also runs on localhost)
+        run: npm run build:e2e -w @w2msync/extension
       - name: End-to-end tests
         run: npx playwright test
       - name: Upload Playwright report

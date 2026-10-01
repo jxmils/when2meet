@@ -15,7 +15,8 @@
     "zip:all": "wxt zip && wxt zip -b firefox --mv3 && wxt zip -b edge",
     "typecheck": "wxt prepare && tsc --noEmit -p .",
     "gen:icons": "node scripts/gen-icons.ts",
-    "postinstall": "wxt prepare"
+    "postinstall": "wxt prepare",
+    "build:e2e": "W2M_DEV_HOSTS=1 wxt build --mode e2e"
   },
   "dependencies": {
     "@w2msync/core": "0.1.0",

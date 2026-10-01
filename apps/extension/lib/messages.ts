@@ -51,6 +51,8 @@ export interface ComputeResult {
   problems: SourceProblem[];
   /** How many sources were read successfully. */
   sourcesRead: number;
+  /** When the oldest calendar data used was read (epoch ms). */
+  readAt: number;
 }
 
 export interface Protocol {
