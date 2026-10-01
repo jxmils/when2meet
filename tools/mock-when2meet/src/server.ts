@@ -47,5 +47,8 @@ server.listen(port, () => {
   console.log(
     `  Days of week:   http://localhost:${port}/?${SEED_POLLS.weekdays.id}-${SEED_POLLS.weekdays.code}`,
   );
+  console.log(
+    `  Term (10 weeks): http://localhost:${port}/?${SEED_POLLS.term.id}-${SEED_POLLS.term.code}`,
+  );
   console.log(`  Request log:    http://localhost:${port}/__mock/log`);
 });

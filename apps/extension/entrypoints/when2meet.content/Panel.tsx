@@ -9,6 +9,7 @@ import {
   type FillRecord,
   planFill,
   recordFill,
+  slotLengthSec,
   systemTimeZone,
   undoTarget,
 } from '@w2msync/core';
@@ -16,7 +17,7 @@ import { type EventRef, eventKey, type PageState, type SaveOutcome } from '@w2ms
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { browser } from 'wxt/browser';
 import { DOCS, PRODUCT_NAME } from '../../lib/config.ts';
-import { formatWeek, plural } from '../../lib/format.ts';
+import { formatCoverage, formatWeek, plural } from '../../lib/format.ts';
 import {
   type ComputeResult,
   type PollChangedEvent,
@@ -88,6 +89,12 @@ export function Panel({ page, pollRef, initial }: Props) {
   const weekdays = detectPollKind(poll.slots) === 'weekdays';
   const signedInAs = poll.userId ? poll.people.find((p) => p.id === poll.userId) : undefined;
   const timeZone = status?.settings.timeZone || systemTimeZone();
+  const firstSlot = poll.slots[0];
+  const lastSlot = poll.slots[poll.slots.length - 1];
+  const coverage =
+    weekdays || firstSlot === undefined || lastSlot === undefined
+      ? null
+      : formatCoverage(firstSlot * 1000, (lastSlot + slotLengthSec(poll.slots)) * 1000, timeZone);
 
   useEffect(() => {
     const loadStatus = () =>
@@ -260,16 +267,21 @@ export function Panel({ page, pollRef, initial }: Props) {
         ...(options.mode ? { mode: options.mode } : {}),
         ...(options.resetOverrides ? { resetOverrides: true } : {}),
       });
-      if (plan.changes.length === 0) {
+      if (plan.changes.length === 0 && plan.conflicts.length === 0) {
         setView({ name: 'up-to-date' });
         return;
       }
       const preview: Preview = { personId, baseline: server.bits, compute, plan, record };
-      if (status.settings.skipPreview) {
+      // With nothing to save but slots marked that the calendar says are busy, show the preview
+      // so the user can choose to remove them.
+      if (status.settings.skipPreview && plan.changes.length > 0) {
         await save(preview);
         return;
       }
-      showPreview(plan.changes);
+      showPreview(
+        plan.changes,
+        plan.conflicts.map((i) => poll.slots[i] as number),
+      );
       scrollGridIntoView();
       setView({ name: 'preview', preview });
     } catch (error) {
@@ -657,8 +669,11 @@ export function Panel({ page, pollRef, initial }: Props) {
         <p>
           {plan.kind === 'revisit'
             ? 'Your calendar changed since your last fill. Your manual edits are kept.'
-            : 'Here is what your calendar says. Changes are highlighted on your grid.'}
+            : plan.changes.length === 0
+              ? 'Every time your calendar shows as free is already marked on this poll.'
+              : 'Here is what your calendar says. Changes are highlighted on your grid.'}
         </p>
+        {coverage && <p class="muted">This poll covers {coverage}.</p>}
         <div class="stats">
           <div class="stat add">
             <strong>{adds > 0 ? `+${adds}` : '0'}</strong>
@@ -686,11 +701,13 @@ export function Panel({ page, pollRef, initial }: Props) {
         )}
         {weekdays && renderWeekPicker()}
         <div class="row">
-          <button type="button" class="primary" onClick={() => void save(preview)}>
-            Save to When2meet
-          </button>
+          {plan.changes.length > 0 && (
+            <button type="button" class="primary" onClick={() => void save(preview)}>
+              Save to When2meet
+            </button>
+          )}
           <button type="button" class="secondary" onClick={cancelPreview}>
-            Cancel
+            {plan.changes.length > 0 ? 'Cancel' : 'Close'}
           </button>
         </div>
         {plan.kind === 'revisit' && Object.keys(plan.overrides).length > 0 && (

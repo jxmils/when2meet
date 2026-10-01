@@ -119,3 +119,43 @@ describe('errors and helpers', () => {
     expect(resolveTzid(null)).toBeNull();
   });
 });
+
+describe('icsBusy: recurring events across a whole term', () => {
+  const termRange = range('2026-10-01T00:00:00Z', '2026-12-31T00:00:00Z');
+
+  it('keeps weekly classes at the same local time across the clock change (TZID without VTIMEZONE)', () => {
+    const ics = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//test//EN',
+      'BEGIN:VEVENT',
+      'UID:class@test',
+      'DTSTAMP:20260901T000000Z',
+      'DTSTART;TZID=Europe/London:20261005T100000',
+      'DTEND;TZID=Europe/London:20261005T120000',
+      'RRULE:FREQ=WEEKLY;BYDAY=MO,WE;UNTIL=20261211T235959Z',
+      'EXDATE;TZID=Europe/London:20261104T100000',
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n');
+    const starts = icsBusy(ics, { range: termRange, timeZone: 'UTC' }).map((b) => iso(b.start));
+    expect(starts).toHaveLength(10 * 2 - 1);
+    expect(starts).toContain('2026-10-21T09:00:00Z'); // Wed 10:00 BST
+    expect(starts).toContain('2026-10-26T10:00:00Z'); // Mon 10:00 GMT
+    expect(starts).not.toContain('2026-11-04T10:00:00Z'); // cancelled (EXDATE)
+    expect(starts.at(-1)).toBe('2026-12-09T10:00:00Z');
+  });
+
+  it('follows the VTIMEZONE across the US change too', () => {
+    const blocks = icsBusy(fixture('google-style.ics'), {
+      range: range('2026-10-25T00:00:00Z', '2026-11-10T00:00:00Z'),
+      timeZone: 'UTC',
+    });
+    const standups = blocks.filter((b) => !b.allDay && b.kind === 'busy').map((b) => iso(b.start));
+    expect(standups).toEqual([
+      '2026-10-26T14:00:00Z',
+      '2026-11-02T15:00:00Z',
+      '2026-11-09T15:00:00Z',
+    ]);
+  });
+});

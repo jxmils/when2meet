@@ -28,6 +28,21 @@ Functions: `ProcessLogin`, `SelectFromHere`, `SelectToHere`, `SelectStop` (also 
 
 **Caching:** poll GETs are not cached. They return `Cache-Control: no-store, no-cache, must-revalidate` and CloudFront `X-Cache: Miss`.
 
+### Multi-week polls (e.g. a whole term)
+
+- A specific-dates poll can span any number of dates. The create form has no limit, and dates picked across calendar pages accumulate.
+- Every date is a column of one wide grid. There is no paging by week.
+- **Example:** a 10-week weekday term, 9–5, is 50 columns × 32 rows, i.e. 1,600 slots and 1,600 `YouTime` cells.
+- **Slot gaps:**
+  - 900 s within a day;
+  - overnight gaps;
+  - weekend gaps;
+  - one gap an hour longer where the clocks change.
+- **Each date keeps its local 9–5.** In UTC the slots shift by an hour after a clock change.
+- **Viewer in another timezone** (e.g. New York viewing a London term poll): When2meet redraws the grid with rows by the viewer's local time. The London–New York offset changes twice during an autumn term, so the redrawn grid gains rows with blank filler cells. Every slot still has its `YouTime` cell (verified: 1,600 of 1,600).
+- **The extension handles all of this without special cases.** Slot times come from `TimeOfSlot` and cell positions from the DOM.
+- **Fill records are stored compactly:** slot times as runs plus bit strings, about 4 bytes per slot. A 15-week, 8:00–22:00, every-day poll needs about 20 KB.
+
 ### Timezones
 
 - **Specific dates:** slot values are real instants. The page renders in the creator's zone. When the viewer's zone differs, it reloads the grid HTML from `AvailabilityGrids.php`.
@@ -91,6 +106,7 @@ Polls (throwaway, public, safe to reuse for testing):
 
 - Specific dates, Oct 5–7 2026, 9–5 America/New_York: https://www.when2meet.com/?38989176-ac4P8
 - Days of the week, Mon–Fri 9–5: https://www.when2meet.com/?38989243-bYl5e
+- 10-week term, weekdays Oct 5 – Dec 11 2026, 9–5 Europe/London (spans the UK and US clock changes): https://www.when2meet.com/?38989819-AIwLK
 
 Results, 1 October 2026:
 
@@ -104,13 +120,14 @@ Results, 1 October 2026:
 | Drag replay through `SelectStop()` | kept; only the dragged cells changed; drag state reset to `-1` |
 | GET caching | `no-store`, CloudFront miss |
 | Viewer timezone ≠ creator timezone (London viewing a New York poll) | grid re-rendered; fill correct |
-| Full extension run (`e2e/live.spec.ts`) on both polls | server state equals the calendar-derived target |
+| Full extension run (`e2e/live.spec.ts`) on all three polls | server state equals the calendar-derived target |
+| 10-week term poll viewed from New York, with a weekly meeting across both clock changes | 1,600 of 1,600 cells after the redraw; saved exactly; about 10 s end to end |
 
 To re-run the extension against them:
 
 ```bash
 npm run build
-LIVE_POLLS="https://www.when2meet.com/?38989176-ac4P8,https://www.when2meet.com/?38989243-bYl5e" npx playwright test e2e/live.spec.ts
+LIVE_POLLS="https://www.when2meet.com/?38989176-ac4P8,https://www.when2meet.com/?38989243-bYl5e,https://www.when2meet.com/?38989819-AIwLK" npx playwright test e2e/live.spec.ts
 ```
 
 ## Canary

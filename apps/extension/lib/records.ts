@@ -1,5 +1,10 @@
 /** Per-poll memory, kept in storage.local (no secrets): who you are on a poll and what was filled. */
-import { type FillRecord, isRecordExpired } from '@w2msync/core';
+import {
+  type FillRecord,
+  packFillRecord,
+  RECORD_RETENTION_MS,
+  unpackFillRecord,
+} from '@w2msync/core';
 import { browser } from 'wxt/browser';
 
 export interface Binding {
@@ -16,11 +21,15 @@ async function read<T>(key: string): Promise<T | null> {
   return ((await browser.storage.local.get(key))[key] as T | undefined) ?? null;
 }
 
-export const loadRecord = (eventId: number, personId: number) =>
-  read<FillRecord>(recordKey(eventId, personId));
+/** Records are stored packed (see `packFillRecord`); term-long polls have thousands of slots. */
+export async function loadRecord(eventId: number, personId: number): Promise<FillRecord | null> {
+  return unpackFillRecord(await read<unknown>(recordKey(eventId, personId)));
+}
 
 export async function saveRecord(record: FillRecord): Promise<void> {
-  await browser.storage.local.set({ [recordKey(record.eventId, record.personId)]: record });
+  await browser.storage.local.set({
+    [recordKey(record.eventId, record.personId)]: packFillRecord(record),
+  });
 }
 
 export async function deleteRecord(eventId: number, personId: number): Promise<void> {
@@ -47,9 +56,10 @@ export async function pruneRecords(now = Date.now()): Promise<void> {
   const stale: string[] = [];
   for (const [key, value] of Object.entries(all)) {
     if (!key.startsWith('fill:')) continue;
-    const record = value as FillRecord;
-    if (isRecordExpired(record, now)) {
-      stale.push(key, bindingKey(record.eventId), checkKey(record.eventId));
+    const { eventId, expiresAt } = (value ?? {}) as { eventId?: number; expiresAt?: number };
+    if (typeof expiresAt === 'number' && now > expiresAt + RECORD_RETENTION_MS) {
+      stale.push(key);
+      if (typeof eventId === 'number') stale.push(bindingKey(eventId), checkKey(eventId));
     }
   }
   if (stale.length > 0) await browser.storage.local.remove(stale);

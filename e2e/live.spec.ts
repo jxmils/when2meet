@@ -15,6 +15,7 @@ import {
   DEFAULT_RULES,
   defaultWeekStart,
   detectPollKind,
+  localStamp,
   mapSlots,
   resolveUnknown,
 } from '../packages/core/src/index.ts';
@@ -64,7 +65,18 @@ for (const url of POLLS) {
     );
     const first = mapped.find(Boolean);
     if (!first) throw new Error('Poll has no slots');
-    // Busy for the first two hours of the first day, and 4 hours later for one hour.
+    // Busy for the first two hours of the first day, 4 hours later for one hour, and a weekly
+    // one-hour meeting at a local time (it moves with clock changes) for 15 weeks.
+    const weekly = [
+      'BEGIN:VEVENT',
+      'UID:live-weekly@test',
+      'DTSTAMP:20260101T000000Z',
+      `DTSTART;TZID=${TZ}:${localStamp(first.start + 5 * 3_600_000, TZ)}`,
+      `DTEND;TZID=${TZ}:${localStamp(first.start + 6 * 3_600_000, TZ)}`,
+      'RRULE:FREQ=WEEKLY;COUNT=15',
+      'SUMMARY:Live weekly',
+      'END:VEVENT',
+    ].join('\r\n');
     const ics = makeIcs([
       { start: first.start, end: first.start + 2 * 3_600_000, summary: 'Live test A' },
       {
@@ -72,7 +84,7 @@ for (const url of POLLS) {
         end: first.start + 5 * 3_600_000,
         summary: 'Live test B',
       },
-    ]);
+    ]).replace('END:VCALENDAR', `${weekly}\r\nEND:VCALENDAR`);
     const blocks = icsBusy(ics, {
       range: { start: first.start - 86_400_000, end: Number.MAX_SAFE_INTEGER },
       timeZone: TZ,
@@ -88,6 +100,15 @@ for (const url of POLLS) {
     const page = await context.newPage();
     await setUp(page, extensionId, { name: NAME, ics });
     await page.goto(url);
+    await page.waitForLoadState('networkidle');
+    const grid = await page.evaluate(() => ({
+      slots: (window as unknown as { TimeOfSlot: number[] }).TimeOfSlot.length,
+      cells: document.querySelectorAll('[id^="YouTime"]').length,
+    }));
+    test
+      .info()
+      .annotations.push({ type: 'grid', description: `${grid.cells} cells, ${grid.slots} slots` });
+    console.log(`${url}: ${grid.cells} grid cells for ${grid.slots} slots`);
     await page
       .getByRole('button', { name: /Fill from my calendar|Calendar changed/ })
       .dispatchEvent('click');
@@ -95,9 +116,18 @@ for (const url of POLLS) {
     const confirm = page.getByRole('button', { name: "Yes, that's me" });
     const save = page.getByRole('button', { name: 'Save to When2meet' });
     const upToDate = page.getByText('already matches your calendar');
-    await expect(confirm.or(save).or(upToDate)).toBeVisible({ timeout: 30_000 });
+    // A participant left over from an earlier run already has availability, so the first fill in
+    // this fresh profile defaults to "add only"; "Remove them too" makes it follow the calendar.
+    const removeConflicts = page.getByRole('button', { name: 'Remove them too' });
+    const settled = save.or(upToDate).or(removeConflicts);
+    await expect(confirm.or(settled)).toBeVisible({ timeout: 30_000 });
     if (await confirm.isVisible()) {
       await confirm.dispatchEvent('click');
+      await expect(settled).toBeVisible({ timeout: 30_000 });
+    }
+    if (await removeConflicts.isVisible()) {
+      await removeConflicts.dispatchEvent('click');
+      await expect(removeConflicts).toBeHidden({ timeout: 30_000 });
       await expect(save.or(upToDate)).toBeVisible({ timeout: 30_000 });
     }
     if (await save.isVisible()) {
