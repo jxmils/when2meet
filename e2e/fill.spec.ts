@@ -185,7 +185,9 @@ test('on a later visit, applies calendar changes but keeps manual edits; undo re
 
   await page.goto(pollUrl(dates));
   await page.getByRole('button', { name: 'Fill from my calendar' }).click();
-  await expect(page.getByText(/Your manual edits are kept/)).toBeVisible();
+  await expect(
+    page.getByText(/1 slot you changed by hand differs from your calendar/),
+  ).toBeVisible();
   await expect(page.locator('.stat.remove strong')).toHaveText('−4');
   await page.getByRole('button', { name: 'Save to When2meet' }).click();
   await expect(page.getByText(/checked against When2meet/)).toBeVisible();
@@ -260,7 +262,7 @@ test('fills a 10-week term poll across clock changes, viewed from another timezo
   expect(stored?.[0]).toBeLessThan(12_000);
 });
 
-test('offers to clear marked slots that clash with the calendar, even with nothing else to add', async ({
+test('replaces hand-marked slots that clash with the calendar, with an option to keep them', async ({
   context,
   extensionId,
   mock,
@@ -278,14 +280,21 @@ test('offers to clear marked slots that clash with the calendar, even with nothi
   await page.goto(pollUrl(dates));
   await page.getByRole('button', { name: 'Fill from my calendar' }).click();
   await page.getByRole('button', { name: "Yes, that's me" }).click();
+  // By default the calendar wins: the clashing slots are removed.
+  await expect(page.locator('.stat.remove strong')).toHaveText(`−${busy}`);
   await expect(
-    page.getByText('Every time your calendar shows as free is already marked'),
+    page.getByText(
+      `${busy} slots you'd marked yourself are busy in your calendar, so they're removed.`,
+    ),
   ).toBeVisible();
-  await expect(page.getByText(`${busy} slots you already marked are busy`)).toBeVisible();
+
+  // "Keep them": nothing new to save, and the kept clashes are outlined.
+  await page.getByRole('button', { name: 'Keep them' }).click();
+  await expect(page.getByText('Nothing new from your calendar.')).toBeVisible();
   await expect(page.locator('[data-w2msync="conflict"]')).toHaveCount(busy);
   await expect(page.getByRole('button', { name: 'Save to When2meet' })).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Remove them too' }).click();
+  await page.getByRole('button', { name: 'Use my calendar for these' }).click();
   await page.getByRole('button', { name: 'Save to When2meet' }).click();
   await expect(page.getByText(/checked against When2meet/)).toBeVisible();
   expect(mock.bitsFor(dates.id, 777)).toBe(expected);
@@ -421,4 +430,38 @@ test('re-reads a calendar link on every click, so calendar edits show up straigh
   } finally {
     server.close();
   }
+});
+
+test('catches a slot marked available by hand during a meeting when checking again', async ({
+  context,
+  extensionId,
+  mock,
+}) => {
+  const slots = mock.polls.get(dates.id)?.slots ?? [];
+  const { ics, expected } = datesCalendar(slots);
+  const page = await context.newPage();
+  await setUp(page, extensionId, { name: 'Jordan Lee', ics });
+  await page.goto(pollUrl(dates));
+  await page.getByRole('button', { name: 'Fill from my calendar' }).click();
+  await page.getByRole('button', { name: 'Save to When2meet' }).click();
+  await expect(page.getByText(/checked against When2meet/)).toBeVisible();
+  const personId = mock.personByName(dates.id, 'Jordan Lee')?.id ?? 0;
+
+  // Someone marks Monday 9:00 (during a meeting) as available by hand.
+  mock.polls
+    .get(dates.id)
+    ?.availability.get(personId)
+    ?.add(slots[0] as number);
+  await page.getByRole('button', { name: 'Check again' }).click();
+  await expect(page.getByText('Nothing new from your calendar.')).toBeVisible();
+  await expect(
+    page.getByText(/1 slot you changed by hand differs from your calendar/),
+  ).toBeVisible();
+  await expect(page.locator('[data-w2msync="conflict"]')).toHaveCount(1);
+
+  await page.getByRole('button', { name: 'Use my calendar for it' }).click();
+  await expect(page.locator('.stat.remove strong')).toHaveText('−1');
+  await page.getByRole('button', { name: 'Save to When2meet' }).click();
+  await expect(page.getByText(/checked against When2meet/)).toBeVisible();
+  expect(mock.bitsFor(dates.id, personId)).toBe(expected);
 });

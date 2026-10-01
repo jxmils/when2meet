@@ -132,9 +132,8 @@ for (const url of POLLS) {
     const confirm = page.getByRole('button', { name: "Yes, that's me" });
     const save = page.getByRole('button', { name: 'Save to When2meet' });
     const upToDate = page.getByText('already matches your calendar');
-    // A participant left over from an earlier run already has availability, so the first fill in
-    // this fresh profile defaults to "add only"; "Remove them too" makes it follow the calendar.
-    const removeConflicts = page.getByRole('button', { name: 'Remove them too' });
+    // Should anything be kept that differs from the calendar, follow the calendar instead.
+    const removeConflicts = page.getByRole('button', { name: /^Use my calendar for/ });
     const settled = save.or(upToDate).or(removeConflicts);
     await expect(confirm.or(settled)).toBeVisible({ timeout: 30_000 });
     if (await confirm.isVisible()) {

@@ -2,7 +2,7 @@ import { bitsFromMap, bitsToMap } from './bits.ts';
 import type { BitChar, BitMap, Bits, EpochMs, UnixSec } from './types.ts';
 
 /**
- * `replace`: When2meet ends up matching the calendar.
+ * `replace` (default): When2meet ends up matching the calendar.
  * `add`: only adds free slots; slots already marked available stay (as manual overrides).
  */
 export type FillMode = 'replace' | 'add';
@@ -45,7 +45,10 @@ export interface FillPlan {
   /** Desired server state (`0`/`1` only). */
   target: Bits;
   changes: PlannedChange[];
-  /** First fill in `add` mode: slots marked available that the calendar says are busy. */
+  /**
+   * Slots kept at a value that differs from the calendar: on a revisit, slots changed by hand;
+   * on a first fill in `add` mode, slots already marked available that the calendar says are busy.
+   */
   conflicts: number[];
   overrides: BitMap;
 }
@@ -58,7 +61,7 @@ export interface PlanInput {
   calendar: Bits;
   /** Previous fill by this person on this poll, if any. */
   record?: FillRecord | null;
-  /** First fill only. Defaults to `replace` when nothing is marked yet, otherwise `add`. */
+  /** First fill only. Defaults to `replace`: "fill from my calendar" means the calendar wins. */
   mode?: FillMode;
   /** Forget manual overrides and follow the calendar exactly. */
   resetOverrides?: boolean;
@@ -74,7 +77,7 @@ export function planFill(input: PlanInput): FillPlan {
 }
 
 function planFirstFill({ slots, server, calendar, mode: requested }: PlanInput): FillPlan {
-  const mode: FillMode = requested ?? (server.includes('1') ? 'add' : 'replace');
+  const mode: FillMode = requested ?? 'replace';
   const overrides: BitMap = {};
   const conflicts: number[] = [];
   const changes: PlannedChange[] = [];
@@ -116,19 +119,23 @@ function planRevisit(input: PlanInput, record: FillRecord): FillPlan {
     });
   }
   const changes: PlannedChange[] = [];
+  const conflicts: number[] = [];
   let target = '';
   for (let i = 0; i < slots.length; i++) {
     const slot = slots[i] as UnixSec;
     const key = String(slot);
     const s = server[i] as BitChar;
     const c = calendar[i];
-    const t: BitChar = overrides[key] ?? (c === '0' || c === '1' ? c : s);
+    const override = overrides[key];
+    const known = c === '0' || c === '1';
+    const t: BitChar = override ?? (known ? c : s);
     target += t;
+    if (override !== undefined && known && override !== c) conflicts.push(i);
     if (t !== s) {
       changes.push({ index: i, slot, to: t, reason: changeReason(key, record, rulesHash) });
     }
   }
-  return { kind: 'revisit', mode: record.mode, target, changes, conflicts: [], overrides };
+  return { kind: 'revisit', mode: record.mode, target, changes, conflicts, overrides };
 }
 
 /**
