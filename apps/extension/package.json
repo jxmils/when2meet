@@ -23,7 +23,7 @@
     "@w2msync/providers": "0.1.0",
     "@w2msync/when2meet": "0.1.0",
     "idb-keyval": "^6.3.0",
-    "preact": "^11.0.0"
+    "preact": "^11.0.1"
   },
   "devDependencies": {
     "vite": "^8.3.2",
